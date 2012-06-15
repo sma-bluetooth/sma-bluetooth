@@ -1,2 +1,4 @@
-smatool: smatool.c
-	gcc -L/usr/lib64/mysql -lbluetooth -lcurl -lmysqlclient -g -o smatool smatool.c
+smatool: smatool.o
+	gcc smatool.o -L/usr/lib -lmysqlclient -lbluetooth -lcurl -lm -o smatool 
+smatool.o: smatool.c
+	gcc -c smatool.c
