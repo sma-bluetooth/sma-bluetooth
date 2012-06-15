@@ -1,0 +1,45 @@
+#!/bin/sh
+#if after dark, then set wakeup for tomorrow at 06:00:00 otherwise in a few mins
+#case "${1}" in resume|thaw) as well as suspend|hibernate
+
+#exists as in path 		/etc/pm/sleep.d/90_sma
+#check results with		cat /proc/driver/rtc
+
+case "${1}" in 
+suspend|suspend_hybrid|hibernate)
+sh -c "echo 0 > /sys/class/rtc/rtc0/wakealarm"
+
+t=$(date +%H%M)
+
+#if [ $t -ge 1630 ]; then
+# sh -c "echo `date '+%s' -d '+ 0 day 07:01:00 UTC'` > /sys/class/rtc/rtc0/wakealarm"
+#else
+# sh -c "echo `date '+%s' -d '+ 29 minutes UTC'` > /sys/class/rtc/rtc0/wakealarm"
+#fi
+
+#sh -c "echo `date '+%s' -d '+ 5 minutes UTC'` > /sys/class/rtc/rtc0/wakealarm"
+
+if   [ $t -le 0620 ]; then
+  sh -c "echo `date '+%s' -d '07:30:00'` > /sys/class/rtc/rtc0/wakealarm"
+elif [ $t -le 1100 ]; then
+  sh -c "echo `date '+%s' -d '+ 59 minutes'` > /sys/class/rtc/rtc0/wakealarm"
+elif [ $t -le 1700 ]; then
+  sh -c "echo `date '+%s' -d '+ 29 minutes'` > /sys/class/rtc/rtc0/wakealarm"
+elif [ $t -le 1900 ]; then
+  sh -c "echo `date '+%s' -d '+ 29 minutes'` > /sys/class/rtc/rtc0/wakealarm"
+elif [ $t -le 2100 ]; then
+  sh -c "echo `date '+%s' -d '+ 1 day 07:30:00'` > /sys/class/rtc/rtc0/wakealarm"
+elif [ $t -le 2400 ]; then
+  sh -c "echo `date '+%s' -d '+ 1 day 07:30:00'` > /sys/class/rtc/rtc0/wakealarm"
+fi
+
+cat /sys/class/rtc/rtc0/wakealarm >> /home/ralph/sma/rtc_last_log.txt
+cat /proc/driver/rtc >> /home/ralph/sma/rtc_last_log.txt
+
+exit 0
+;;
+thaw|resume)
+cd /home/ralph/sma
+./smatool>>log_resume.txt
+;;
+esac
