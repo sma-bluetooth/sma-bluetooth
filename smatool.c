@@ -30,7 +30,8 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <curl/curl.h>
-#include "mysql.c"
+#include "repost.h"
+#include "sma_mysql.h"
 
 
 /*
@@ -44,28 +45,6 @@ typedef u_int16_t u16;
 #define ASSERT(x) assert(x)
 #define SCHEMA "2"  /* Current database schema */
 #define _XOPEN_SOURCE /* glibc2 needs this */
-
-
-typedef struct{
-    char Inverter[20]; 		/*--inverter 	-i 	*/
-    char BTAddress[20];         /*--address  	-a 	*/
-    int  bt_timeout;		/*--timeout  	-t 	*/
-    char Password[20];          /*--password 	-p 	*/
-    char Config[80];            /*--config   	-c 	*/
-    char File[80];              /*--file     	-f 	*/
-    float latitude_f;           /*--latitude  	-la 	*/
-    float longitude_f;          /*--longitude 	-lo 	*/
-    char MySqlHost[40];         /*--mysqlhost   -h 	*/
-    char MySqlDatabase[20];     /*--mysqldb     -d 	*/
-    char MySqlUser[80];         /*--mysqluser   -user 	*/
-    char MySqlPwd[80];          /*--mysqlpwd    -pwd 	*/
-    char PVOutputURL[80];       /*--pvouturl    -url 	*/
-    char PVOutputKey[80];       /*--pvoutkey    -key 	*/
-    char PVOutputSid[20];       /*--pvoutsid    -sid 	*/
-    char Setting[80];           /*inverter model data*/
-    unsigned char InverterCode[4]; /*Unknown code inverter specific*/
-    unsigned int ArchiveCode;    /* Code for archive data */
-} ConfType;
 
 typedef struct{
     unsigned int 	key1;
@@ -632,332 +611,6 @@ unsigned char *  get_timezone_in_seconds( unsigned char *tzhex )
    return tzhex;
 }
 
-char *  sunrise( float latitude, float longitude )
-{
-   //adapted from http://williams.best.vwh.net/sunrise_sunset_algorithm.htm
-   time_t curtime;
-   struct tm *loctime;
-   struct tm *utctime;
-   int day,month,year,hour,minute;
-   char *returntime;
-
-   double t,M,L,T,RA,Lquadrant,RAquadrant,sinDec,cosDec;
-   double cosH, H, UT, localT,lngHour;
-   float localOffset,zenith=91;
-   double pi=M_PI;
-
-   returntime = (char *)malloc(6*sizeof(char));
-   curtime = time(NULL);  //get time in seconds since epoch (1/1/1970)	
-   loctime = localtime(&curtime);
-   day = loctime->tm_mday;
-   month = loctime->tm_mon +1;
-   year = loctime->tm_year + 1900;
-   hour = loctime->tm_hour;
-   minute = loctime->tm_min; 
-   utctime = gmtime(&curtime);
-   
-
-   if( debug == 1 ) printf( "utc=%04d-%02d-%02d %02d:%02d local=%04d-%02d-%02d %02d:%02d diff %d hours\n", utctime->tm_year+1900, utctime->tm_mon+1,utctime->tm_mday,utctime->tm_hour,utctime->tm_min, year, month, day, hour, minute, hour-utctime->tm_hour );
-   localOffset=(hour-utctime->tm_hour)+(minute-utctime->tm_min)/60;
-   if( debug == 1 ) printf( "localOffset=%f\n", localOffset );
-   if(( year > utctime->tm_year+1900 )||( month > utctime->tm_mon+1 )||( day > utctime->tm_mday ))
-      localOffset+=24;
-   if(( year < utctime->tm_year+1900 )||( month < utctime->tm_mon+1 )||( day < utctime->tm_mday ))
-      localOffset-=24;
-   if( debug == 1 ) printf( "localOffset=%f\n", localOffset );
-   lngHour = longitude / 15;
-   t = loctime->tm_yday + ((6 - lngHour) / 24);
-   //Calculate the Sun's mean anomaly
-   M = (0.9856 * t) - 3.289;
-   //Calculate the Sun's tru longitude
-   L = M + (1.916 * sin((pi/180)*M)) + (0.020 * sin(2 * (pi/180)*M)) + 282.634;
-   if( L > 360 ) L=L-360;
-   if( L < 0 ) L=L+360;
-   //calculate the Sun's right ascension
-   RA = (180/pi)*atan(0.91764 * tan((pi/180)*L));
-   //right ascension value needs to be in the same quadrant as L
-   Lquadrant  = (floor( L/90)) * 90;
-   RAquadrant = (floor(RA/90)) * 90;
-    
-   RA = RA + (Lquadrant - RAquadrant);
-   //right ascension value needs to be converted into hours
-   RA = RA / 15;
-   //calculate the Sun's declination
-   sinDec = 0.39782 * sin((pi/180)*L);
-   cosDec = cos(asin(sinDec));
-   //calculate the Sun's local hour angle
-   cosH = (cos((pi/180)*zenith) - (sinDec * sin((pi/180)*latitude))) / (cosDec * cos((pi/180)*latitude));
-	
-   if (cosH >  1) 
-      printf( "Sun never rises here!\n" );
-	  //the sun never rises on this location (on the specified date)
-   if (cosH < -1)
-      printf( "Sun never sets here!\n" );
-	  //the sun never sets on this location (on the specified date)
-   //finish calculating H and convert into hours
-   H = 360 -(180/pi)*acos(cosH);
-   H = H/15;
-   //calculate local mean time of rising/setting
-   T = H + RA - (0.06571 * t) - 6.622;
-   //adjust back to UTC
-   UT = T - lngHour;
-   if( UT < 0 ) UT=UT+24;
-   if( UT > 24 ) UT=UT-24;
-   day = loctime->tm_mday;
-   month = loctime->tm_mon +1;
-   year = loctime->tm_year + 1900;
-   hour = loctime->tm_hour;
-   minute = loctime->tm_min; 
-   //convert UT value to local time zone of latitude/longitude
-   localT = UT + localOffset;
-   if( localT < 0 ) localT=localT+24;
-   if( localT > 24 ) localT=localT-24;
-   sprintf( returntime, "%02.0f:%02.0f",floor(localT),floor((localT-floor(localT))*60) );
-   return returntime;
-}
-
-char * sunset( float latitude, float longitude )
-{
-   //adapted from http://williams.best.vwh.net/sunrise_sunset_algorithm.htm
-   time_t curtime;
-   struct tm *loctime;
-   struct tm *utctime;
-   int day,month,year,hour,minute;
-   char *returntime;
-
-   double t,M,L,T,RA,Lquadrant,RAquadrant,sinDec,cosDec;
-   double cosH, H, UT, localT,lngHour;
-   float localOffset,zenith=91;
-   double pi=M_PI;
-
-   returntime = (char *)malloc(6*sizeof(char));
-
-   curtime = time(NULL);  //get time in seconds since epoch (1/1/1970)	
-   loctime = localtime(&curtime);
-   day = loctime->tm_mday;
-   month = loctime->tm_mon +1;
-   year = loctime->tm_year + 1900;
-   hour = loctime->tm_hour;
-   minute = loctime->tm_min; 
-   utctime = gmtime(&curtime);
-   
-
-   localOffset=(hour-utctime->tm_hour)+(minute-utctime->tm_min)/60;
-   if(( year > utctime->tm_year+1900 )||( month > utctime->tm_mon+1 )||( day > utctime->tm_mday ))
-      localOffset+=24;
-   if(( year < utctime->tm_year+1900 )||( month < utctime->tm_mon+1 )||( day < utctime->tm_mday ))
-      localOffset-=24;
-
-   lngHour = longitude / 15;
-   t = loctime->tm_yday + ((18 - lngHour) / 24);
-   //Calculate the Sun's mean anomaly
-   M = (0.9856 * t) - 3.289;
-   //Calculate the Sun's tru longitude
-   L = M + (1.916 * sin((pi/180)*M)) + (0.020 * sin(2 * (pi/180)*M)) + 282.634;
-   if( L > 360 ) L=L-360;
-   if( L < 0 ) L=L+360;
-   //calculate the Sun's right ascension
-   RA = (180/pi)*atan(0.91764 * tan((pi/180)*L));
-   //right ascension value needs to be in the same quadrant as L
-   Lquadrant  = (floor( L/90)) * 90;
-   RAquadrant = (floor(RA/90)) * 90;
-    
-   RA = RA + (Lquadrant - RAquadrant);
-   //right ascension value needs to be converted into hours
-   RA = RA / 15;
-   //calculate the Sun's declination
-   sinDec = 0.39782 * sin((pi/180)*L);
-   cosDec = cos(asin(sinDec));
-   //calculate the Sun's local hour angle
-   cosH = (cos((pi/180)*zenith) - (sinDec * sin((pi/180)*latitude))) / (cosDec * cos((pi/180)*latitude));
-	
-   if (cosH >  1); 
-	  //the sun never rises on this location (on the specified date)
-   if (cosH < -1);
-	  //the sun never sets on this location (on the specified date)
-   //finish calculating H and convert into hours
-   H = (180/pi)*acos(cosH);
-   H = H/15;
-   //calculate local mean time of rising/setting
-   T = H + RA - (0.06571 * t) - 6.622;
-   //adjust back to UTC
-   UT = T - lngHour;
-   if( UT > 24 ) UT=UT-24;
-   if( UT < 0 ) UT=UT+24;
-   //convert UT value to local time zone of latitude/longitude
-   localT = UT + localOffset;
-   if( localT < 0 ) localT=localT+24;
-   if( localT > 24 ) localT=localT-24;
-   sprintf( returntime, "%02.0f:%02.0f",floor(localT),floor((localT-floor(localT))*60) );
-   return returntime;
-}
-
-int install_mysql_tables( ConfType * conf )
-/*  Do initial mysql table creationsa */
-{
-    int	        found=0;
-    MYSQL_ROW 	row;
-    char 	SQLQUERY[1000];
-
-    OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, "mysql");
-    //Get Start of day value
-    sprintf(SQLQUERY,"SHOW DATABASES" );
-    if (debug == 1) printf("%s\n",SQLQUERY);
-    DoQuery(SQLQUERY);
-    while ((row = mysql_fetch_row(res)))  //if there is a result, update the row
-    {
-       if( strcmp( row[0], conf->MySqlDatabase ) == 0 )
-       {
-          found=1;
-          printf( "Database exists - exiting" );
-       }
-    }
-    if( found == 0 )
-    {
-       sprintf( SQLQUERY,"CREATE DATABASE IF NOT EXISTS %s", conf->MySqlDatabase );
-       if (debug == 1) printf("%s\n",SQLQUERY);
-       DoQuery(SQLQUERY);
-
-       sprintf( SQLQUERY,"USE  %s", conf->MySqlDatabase );
-       if (debug == 1) printf("%s\n",SQLQUERY);
-       DoQuery(SQLQUERY);
-
-       sprintf( SQLQUERY,"CREATE TABLE `Almanac` ( `id` bigint(20) NOT NULL \
-          AUTO_INCREMENT, \
-          `date` date NOT NULL,\
-          `sunrise` datetime DEFAULT NULL,\
-          `sunset` datetime DEFAULT NULL,\
-          `CHANGETIME` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, \
-           PRIMARY KEY (`id`),\
-           UNIQUE KEY `date` (`date`)\
-           ) ENGINE=MyISAM" );
-
-       if (debug == 1) printf("%s\n",SQLQUERY);
-       DoQuery(SQLQUERY);
-  
-       sprintf( SQLQUERY, "CREATE TABLE `DayData` ( \
-           `DateTime` datetime NOT NULL, \
-           `Inverter` varchar(10) NOT NULL, \
-           `Serial` varchar(40) NOT NULL, \
-           `CurrentPower` int(11) DEFAULT NULL, \
-           `ETotalToday` DECIMAL(10,3) DEFAULT NULL, \
-           `PVOutput` datetime DEFAULT NULL, \
-           `CHANGETIME` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' ON UPDATE CURRENT_TIMESTAMP, \
-           PRIMARY KEY (`DateTime`,`Inverter`,`Serial`) \
-           ) ENGINE=MyISAM" );
-
-       if (debug == 1) printf("%s\n",SQLQUERY);
-       DoQuery(SQLQUERY);
-
-       sprintf( SQLQUERY, "CREATE TABLE `settings` ( \
-           `value` varchar(128) NOT NULL, \
-           `data` varchar(500) NOT NULL, \
-           PRIMARY KEY (`value`) \
-           ) ENGINE=MyISAM" );
-
-       if (debug == 1) printf("%s\n",SQLQUERY);
-       DoQuery(SQLQUERY);
-        
-       
-       sprintf( SQLQUERY, "INSERT INTO `settings` SET `value` = \'schema\', `data` = \'%s\' ", SCHEMA );
-
-       if (debug == 1) printf("%s\n",SQLQUERY);
-       DoQuery(SQLQUERY);
-    }
-    mysql_close(conn);
-
-    return found;
-}
-
-void update_mysql_tables( ConfType * conf )
-/*  Do mysql table schema updates */
-{
-    int		schema_value=0;
-    MYSQL_ROW 	row;
-    char 	SQLQUERY[1000];
-
-    OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, "mysql");
-    sprintf( SQLQUERY,"USE  %s", conf->MySqlDatabase );
-    if (debug == 1) printf("%s\n",SQLQUERY);
-    DoQuery(SQLQUERY);
-    /*Check current schema value*/
-    sprintf(SQLQUERY,"SELECT data FROM settings WHERE value=\'schema\' " );
-    if (debug == 1) printf("%s\n",SQLQUERY);
-    DoQuery(SQLQUERY);
-    if ((row = mysql_fetch_row(res)))  //if there is a result, update the row
-    {
-       schema_value=atoi(row[0]);
-    }
-    mysql_free_result(res);
-    if( schema_value == 1 ) { //Upgrade from 1 to 2
-        sprintf(SQLQUERY,"ALTER TABLE `DayData` CHANGE `ETotalToday` `ETotalToday` DECIMAL(10,3) NULL DEFAULT NULL" );
-        if (debug == 1) printf("%s\n",SQLQUERY);
-        DoQuery(SQLQUERY);
-        sprintf( SQLQUERY, "UPDATE `settings` SET `value` = \'schema\', `data` = 2 " );
-        if (debug == 1) printf("%s\n",SQLQUERY);
-        DoQuery(SQLQUERY);
-    }
-    mysql_close(conn);
-}
-
-int check_schema( ConfType * conf )
-/*  Check if using the correct database schema */
-{
-    int	        found=0;
-    MYSQL_ROW 	row;
-    char 	SQLQUERY[200];
-
-    OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, conf->MySqlDatabase);
-    //Get Start of day value
-    sprintf(SQLQUERY,"SELECT data FROM settings WHERE value=\'schema\' " );
-    if (debug == 1) printf("%s\n",SQLQUERY);
-    DoQuery(SQLQUERY);
-    if ((row = mysql_fetch_row(res)))  //if there is a result, update the row
-    {
-       if( strcmp( row[0], SCHEMA ) == 0 )
-          found=1;
-    }
-    mysql_free_result(res);
-    mysql_close(conn);
-    if( found != 1 )
-    {
-       printf( "Please Update database schema use --UPDATE\n" );
-    }
-    return found;
-}
-
-int todays_almanac( ConfType *conf )
-/*  Check if sunset and sunrise have been set today */
-{
-    int	        found=0;
-    MYSQL_ROW 	row;
-    char 	SQLQUERY[200];
-
-    OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, conf->MySqlDatabase);
-    //Get Start of day value
-    sprintf(SQLQUERY,"SELECT sunrise FROM Almanac WHERE date=DATE_FORMAT( NOW(), \"%%Y-%%m-%%d\" ) " );
-    if (debug == 1) printf("%s\n",SQLQUERY);
-    DoQuery(SQLQUERY);
-    if ((row = mysql_fetch_row(res)))  //if there is a result, update the row
-    {
-       found=1;
-    }
-    mysql_close(conn);
-    return found;
-}
-
-void update_almanac( ConfType *conf, char * sunrise, char * sunset )
-{
-    char 	SQLQUERY[200];
-
-    OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, conf->MySqlDatabase);
-    //Get Start of day value
-    sprintf(SQLQUERY,"INSERT INTO Almanac SET sunrise=CONCAT(DATE_FORMAT( NOW(), \"%%Y-%%m-%%d \"),\"%s\"), sunset=CONCAT(DATE_FORMAT( NOW(), \"%%Y-%%m-%%d \"),\"%s\" ), date=NOW() ", sunrise, sunset );
-    if (debug == 1) printf("%s\n",SQLQUERY);
-    DoQuery(SQLQUERY);
-    mysql_close(conn);
-}
-
 int auto_set_dates( ConfType * conf, int * daterange, int mysql, char * datefrom, char * dateto )
 /*  If there are no dates set - get last updated date and go from there to NOW */
 {
@@ -1023,6 +676,7 @@ int is_light( ConfType * conf )
           if( atoi( (char *)row[0] ) == 1 ) light=0;
        }
     }
+    if (debug == 1) printf("Before close\n",SQLQUERY);
     
     mysql_close(conn);
     return light;
@@ -1674,14 +1328,6 @@ int ReadCommandConfig( ConfType *conf, int argc, char **argv, char * datefrom, c
     return( 0 );
 }
 
-size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream) 
-{
-    size_t written;
-
-    written = fwrite(ptr, size, nmemb, stream);
-    return written;
-}
-
 char * debugdate()
 {
     time_t curtime;
@@ -1797,12 +1443,12 @@ int main(int argc, char **argv)
     SetSwitches( &conf, datefrom, dateto, &location, &mysql, &post, &file, &daterange, &test );  
     if(( install==1 )&&( mysql==1 ))
     {
-        install_mysql_tables( &conf );
+        install_mysql_tables( &conf, SCHEMA, debug );
         exit(0);
     }
     if(( update==1 )&&( mysql==1 ))
     {
-        update_mysql_tables( &conf );
+        update_mysql_tables( &conf, debug );
         exit(0);
     }
     // Set value for inverter type
@@ -1813,7 +1459,8 @@ int main(int argc, char **argv)
     get_timezone_in_seconds( tzhex );
     // Location based information to avoid quering Inverter in the dark
     if((location==1)&&(mysql==1)) {
-       if( ! todays_almanac( &conf ) ) {
+        if( debug == 1 ) printf( "Before todays Almanac\n" ); 
+        if( ! todays_almanac( &conf ) ) {
            sprintf( sunrise_time, "%s", sunrise(conf.latitude_f,conf.longitude_f ));
            sprintf( sunset_time, "%s", sunset(conf.latitude_f, conf.longitude_f ));
            if( verbose==1) printf( "sunrise=%s sunset=%s\n", sunrise_time, sunset_time );
@@ -1821,100 +1468,105 @@ int main(int argc, char **argv)
         }
     }
     if( mysql==1 ) 
-       if( check_schema( &conf ) != 1 )
-          exit(-1);
-    if(daterange==0 ) //auto set the dates
+        if( debug == 1 ) printf( "Before Check Schema\n" ); 
+       	if( check_schema( &conf, SCHEMA, debug ) != 1 )
+            exit(-1);
+    if(daterange==0 ) { //auto set the dates
+        if( debug == 1 ) printf( "auto_set_dates\n" ); 
         auto_set_dates( &conf, &daterange, mysql, datefrom, dateto );
+    }
     else
         if( verbose == 1 ) printf( "QUERY RANGE    from %s to %s\n", datefrom, dateto ); 
     if(( daterange==1 )&&((location=0)||(mysql==0)||is_light( &conf )))
     {
-	if (verbose ==1) printf("Address %s\n",conf.BTAddress);
+	if (debug ==1) printf("Address %s\n",conf.BTAddress);
 
         if (file ==1)
 	  fp=fopen(conf.File,"r");
         else
 	  fp=fopen("/etc/sma.in","r");
-   for( i=1; i<20; i++ ){
-      // allocate a socket
-      s = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
+   	for( i=1; i<20; i++ ){
+      	    // allocate a socket
+      	    s = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
 
-      // set the connection parameters (who to connect to)
-      addr.rc_family = AF_BLUETOOTH;
-      addr.rc_channel = (uint8_t) 1;
-      str2ba( conf.BTAddress, &addr.rc_bdaddr );
+      	    // set the connection parameters (who to connect to)
+      	    addr.rc_family = AF_BLUETOOTH;
+      	    addr.rc_channel = (uint8_t) 1;
+      	    str2ba( conf.BTAddress, &addr.rc_bdaddr );
 
-      // connect to server
-      if( debug==1 ) { printf( "datefrom=%s dateto=%s\n", datefrom, dateto ); }
-      status = connect(s, (struct sockaddr *)&addr, sizeof(addr));
-      if (status <0){
-          printf("Error connecting to %s\n",conf.BTAddress);
-          close( s );
-      }
-      else
-          break;
-   }
-   if (status < 0 )
-   {
-	return( -1 );
-   }
+      	    // connect to server
+      	    if( debug==1 ) { printf( "datefrom=%s dateto=%s\n", datefrom, dateto ); }
+      	    status = connect(s, (struct sockaddr *)&addr, sizeof(addr));
+      	    if (status <0){
+                printf("Error connecting to %s\n",conf.BTAddress);
+                close( s );
+      	    }
+            else
+                break;
+        }
+   	if (status < 0 )
+   	{
+    	    printf("Bad Status\n");
+	    return( -1 );
+   	}
 
-   // convert address
-   address[5] = conv(strtok(conf.BTAddress,":"));
-   address[4] = conv(strtok(NULL,":"));
-   address[3] = conv(strtok(NULL,":"));
-   address[2] = conv(strtok(NULL,":"));
-   address[1] = conv(strtok(NULL,":"));
-   address[0] = conv(strtok(NULL,":"));
+   	// convert address
+   	address[5] = conv(strtok(conf.BTAddress,":"));
+   	address[4] = conv(strtok(NULL,":"));
+   	address[3] = conv(strtok(NULL,":"));
+   	address[2] = conv(strtok(NULL,":"));
+   	address[1] = conv(strtok(NULL,":"));
+   	address[0] = conv(strtok(NULL,":"));
 	
-   while (!feof(fp)){	
-        start:
-	if (fgets(line,400,fp) != NULL){				//read line from sma.in
+   	while (!feof(fp)){	
+            start:
+	    if (fgets(line,400,fp) != NULL){				//read line from sma.in
 		linenum++;
 		lineread = strtok(line," ;");
 		if(!strcmp(lineread,"R")){		//See if line is something we need to receive
-			if (debug	== 1) printf("[%d] %s Waiting for string\n",linenum, debugdate() );
-			cc = 0;
-			do{
-				lineread = strtok(NULL," ;");
-				switch(select_str(lineread)) {
+		    if (debug	== 1) printf("[%d] %s Waiting for string\n",linenum, debugdate() );
+		    cc = 0;
+		    do{
+			lineread = strtok(NULL," ;");
+			switch(select_str(lineread)) {
 	
-				case 0: // $END
+			    case 0: // $END
 				//do nothing
 				break;			
 
-				case 1: // $ADDR
+			    case 1: // $ADDR
 				for (i=0;i<6;i++){
-					fl[cc] = address[i];
-					cc++;
+			  	    fl[cc] = address[i];
+				    cc++;
 				}
-				break;	
+			   	 break;	
 
-				case 3: // $SER
+			    case 3: // $SER
 				for (i=0;i<4;i++){
-					fl[cc] = serial[i];
-					cc++;
+			  	    fl[cc] = serial[i];
+				    cc++;
 				}
 				break;	
 				
-				case 7: // $ADD2
+			    case 7: // $ADD2
 				for (i=0;i<6;i++){
-					fl[cc] = address2[i];
-					cc++;
+				    fl[cc] = address2[i];
+				    cc++;
 				}
 				break;	
 
-				case 8: // $CHAN
+			    case 8: // $CHAN
 				fl[cc] = chan[0];
 				cc++;
 				break;
 
-				default :
+			    default :
 				fl[cc] = conv(lineread);
 				cc++;
-				}
+			}
 
-			} while (strcmp(lineread,"$END"));
+		    } 
+		    while (strcmp(lineread,"$END"));
 			if (debug == 1){ 
 				printf("[%d] %s waiting for: ", linenum, debugdate() );
 				for (i=0;i<cc;i++) printf("%02x ",fl[i]);
@@ -2739,84 +2391,8 @@ int main(int argc, char **argv)
   archdatalen=0;
   free(last_sent);
 }
-
 if ((repost ==1)&&(error==0)){
-    FILE* fp;
-    char buf[1024], buf1[400];
-    int	 update_data;
-
-    float dtotal, starttotal;
-    float power;
-    
-    /* Connect to database */
-    OpenMySqlDatabase( conf.MySqlHost, conf.MySqlUser, conf.MySqlPwd, conf.MySqlDatabase );
-    //Get Start of day value
-    starttotal = 0;
-    sprintf(SQLQUERY,"SELECT DATE_FORMAT( dt1.DateTime, \"%%Y%%m%%d\" ), round((dt1.ETotalToday*1000-dt2.ETotalToday*1000),0) FROM DayData as dt1 join DayData as dt2 on dt2.DateTime = DATE_SUB( dt1.DateTime, interval 1 day ) WHERE dt1.DateTime LIKE \"%%-%%-%% 23:55:00\" ORDER BY dt1.DateTime DESC" );
-    if (debug == 1) printf("%s\n",SQLQUERY);
-    DoQuery(SQLQUERY);
-    while(( row = mysql_fetch_row(res) ))  //if there is a result, update the row
-    {
-        fp=fopen( "/tmp/curl_output", "w+" );
-        update_data = 0;
-        dtotal = atof(row[1]);
-        sleep(2);  //pvoutput limits 1 second output
-	ret=sprintf(compurl,"http://pvoutput.org/service/r1/getstatistic.jsp?df=%s&dt=%s&key=%s&sid=%s",row[0],row[0],conf.PVOutputKey,conf.PVOutputSid);
-        curl = curl_easy_init();
-        if (curl){
-	     curl_easy_setopt(curl, CURLOPT_URL, compurl);
-	     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
-	     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-	     //curl_easy_setopt(curl, CURLOPT_FAILONERROR, compurl);
-	     result = curl_easy_perform(curl);
-             if (debug == 1) printf("result = %d\n",result);
-             rewind( fp );
-             fgets( buf, sizeof( buf ), fp );
-             result = sscanf( buf, "Bad request %s has no outputs between the requested period", buf1 );
-             printf( "return=%d buf1=%s\n", result, buf1 );
-             if( result > 0 )
-             {
-                 update_data=1;
-                 printf( "test\n" );
-             }
-             else
-             {
-                 printf( "buf=%s here\n", buf );
-                 if( sscanf( buf, "%f,%s", &power, buf1 ) > 0 ) {
-                    printf( "Power %f\n", power );
-                    if( power != dtotal )
-                    {
-                       printf( "Power %f Produced=%f\n", power, dtotal );
-                       update_data=1;
-                    }
-                 }
-             }
-	     curl_easy_cleanup(curl);
-             if( update_data == 1 ) {
-                 curl = curl_easy_init();
-                 if (curl){
-	            ret=sprintf(compurl,"http://pvoutput.org/service/r2/addoutput.jsp?d=%s&g=%f&key=%s&sid=%s",row[0],dtotal,conf.PVOutputKey,conf.PVOutputSid);
-                    if (debug == 1) printf("url = %s\n",compurl);
-		    curl_easy_setopt(curl, CURLOPT_URL, compurl);
-		    curl_easy_setopt(curl, CURLOPT_FAILONERROR, compurl);
-		    result = curl_easy_perform(curl);
-                    sleep(1);
-	            if (debug == 1) printf("result = %d\n",result);
-		    curl_easy_cleanup(curl);
-                    if( result==0 ) 
-                    {
-                        sprintf(SQLQUERY,"UPDATE DayData set PVOutput=NOW() WHERE DateTime=\"%s235500\"  ", row[0] );
-                        if (debug == 1) printf("%s\n",SQLQUERY);
-                        //DoQuery(SQLQUERY);
-                    }
-                    else
-                        break;
-                 }
-             }
-        }
-        fclose(fp);
-    }
-    mysql_close(conn);
+    sma_repost( &conf, debug, verbose );
 }
 
 return 0;
