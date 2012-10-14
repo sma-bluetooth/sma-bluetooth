@@ -43,7 +43,7 @@ typedef u_int16_t u16;
 #define PPPINITFCS16 0xffff /* Initial FCS value    */
 #define PPPGOODFCS16 0xf0b8 /* Good final FCS value */
 #define ASSERT(x) assert(x)
-#define SCHEMA "2"  /* Current database schema */
+#define SCHEMA "3"  /* Current database schema */
 #define _XOPEN_SOURCE /* glibc2 needs this */
 
 typedef struct{
@@ -85,6 +85,7 @@ char *accepted_strings[] = {
 "$TIMESET"    /*Unknown string involved in time setting*/
 };
 
+extern void live_mysql( ConfType *, int, int, int, int, int, int, char *, long long, char *, float, char *, int );
 int cc,debug = 0,verbose=0;
 unsigned char fl[1024] = { 0 };
 
@@ -1358,6 +1359,7 @@ int main(int argc, char **argv)
 	unsigned char datarecord[1024];
 	unsigned char * data;
 	unsigned char send_count = 0x0;
+        long long inverter_serial;
         int return_key;
         int gap=1;
         int datalen = 0;
@@ -1460,9 +1462,9 @@ int main(int argc, char **argv)
     // Location based information to avoid quering Inverter in the dark
     if((location==1)&&(mysql==1)) {
         if( debug == 1 ) printf( "Before todays Almanac\n" ); 
-        if( ! todays_almanac( &conf ) ) {
-           sprintf( sunrise_time, "%s", sunrise(conf.latitude_f,conf.longitude_f ));
-           sprintf( sunset_time, "%s", sunset(conf.latitude_f, conf.longitude_f ));
+        if( ! todays_almanac( &conf, debug ) ) {
+           sprintf( sunrise_time, "%s", sunrise(&conf, debug ));
+           sprintf( sunset_time, "%s", sunset(&conf, debug ));
            if( verbose==1) printf( "sunrise=%s sunset=%s\n", sunrise_time, sunset_time );
            update_almanac(  &conf, sunrise_time, sunset_time );
         }
@@ -1968,7 +1970,11 @@ int main(int argc, char **argv)
                                       }
                                    }
                                    if( return_key >= 0 )
+				   {
 				       printf("%d-%02d-%02d %02d:%02d:%02d %-20s = %.0f %-20s\n", year, month, day, hour, minute, second, returnkeylist[return_key].description, currentpower_total/returnkeylist[return_key].divisor, returnkeylist[return_key].units );
+				       inverter_serial=serial[3]*16777216+serial[2]*65536+serial[1]*256+serial[0];
+				       live_mysql( &conf, year, month, day, hour, minute, second, conf.Inverter, inverter_serial, returnkeylist[return_key].description, currentpower_total/returnkeylist[return_key].divisor, returnkeylist[return_key].units, debug );
+                                   }
                                    else
 				       printf("%d-%02d-%02d %02d:%02d:%02d NO DATA for %02x %02x = %.0f NO UNITS\n", year, month, day, hour, minute, second, (data+i+1)[0], (data+i+1)[1], currentpower_total );
                                 }
@@ -2081,7 +2087,7 @@ int main(int argc, char **argv)
 					 (archdatalist+archdatalen)->date=idate;
                                          strcpy((archdatalist+archdatalen)->inverter,conf.Inverter);
                                          ConvertStreamtoLong( serial, 4, &(archdatalist+archdatalen)->serial);
-                                         (archdatalist+archdatalen)->accum_value=gtotal/1000;
+                                      ;   (archdatalist+archdatalen)->accum_value=gtotal/1000;
                                          (archdatalist+archdatalen)->current_value=(gtotal-ptotal)*12;
                                          archdatalen++;
                                          ptotal=gtotal;
@@ -2281,7 +2287,7 @@ int main(int argc, char **argv)
             }
             else  //Use batch mode 30 values at a time!
             */
-        sprintf(SQLQUERY,"SELECT DATE_FORMAT(dd1.DateTime,\'%%Y%%m%%d\'), DATE_FORMAT(dd1.DateTime,\'%%H:%%i\'), ROUND((dd1.ETotalToday-dd2.EtotalToday)*1000), dd1.CurrentPower, dd1.DateTime FROM DayData as dd1 join DayData as dd2 on dd2.DateTime=DATE_FORMAT(dd1.DateTime,\'%%Y-%%m-%%d 00:00:00\') WHERE dd1.DateTime>=Date_Sub(CURDATE(),INTERVAL 29 DAY) and dd1.PVOutput IS NULL and dd1.CurrentPower>0 ORDER BY dd1.DateTime ASC" );
+        sprintf(SQLQUERY,"SELECT DATE_FORMAT(dd1.DateTime,\'%%Y%%m%%d\'), DATE_FORMAT(dd1.DateTime,\'%%H:%%i\'), ROUND((dd1.ETotalToday-dd2.EtotalToday)*1000), if( dd1.CurrentPower < 3500,dd1.CurrentPower, 3500 ), dd1.DateTime FROM DayData as dd1 join DayData as dd2 on dd2.DateTime=DATE_FORMAT(dd1.DateTime,\'%%Y-%%m-%%d 00:00:00\') WHERE dd1.DateTime>=Date_Sub(CURDATE(),INTERVAL 13 DAY) and dd1.PVOutput IS NULL and dd1.CurrentPower>0 ORDER BY dd1.DateTime ASC" );
         if (debug == 1) printf("%s\n",SQLQUERY);
         DoQuery(SQLQUERY);
         batch_count=0;
@@ -2334,7 +2340,7 @@ int main(int argc, char **argv)
 		        curl_easy_cleanup(curl);
                         if( result==0 ) 
                         {
-                           sprintf(SQLQUERY,"SELECT DATE_FORMAT(dd1.DateTime,\'%%Y%%m%%d\'), DATE_FORMAT(dd1.DateTime,\'%%H:%%i\'), ROUND((dd1.ETotalToday-dd2.EtotalToday)*1000), dd1.CurrentPower, dd1.DateTime FROM DayData as dd1 join DayData as dd2 on dd2.DateTime=DATE_FORMAT(dd1.DateTime,\'%%Y-%%m-%%d 00:00:00\') WHERE dd1.DateTime>=Date_Sub(CURDATE(),INTERVAL 30 DAY) and dd1.PVOutput IS NULL and dd1.CurrentPower>0 ORDER BY dd1.DateTime ASC limit %d", batch_count );
+                           sprintf(SQLQUERY,"SELECT DATE_FORMAT(dd1.DateTime,\'%%Y%%m%%d\'), DATE_FORMAT(dd1.DateTime,\'%%H:%%i\'), ROUND((dd1.ETotalToday-dd2.EtotalToday)*1000), dd1.CurrentPower, dd1.DateTime FROM DayData as dd1 join DayData as dd2 on dd2.DateTime=DATE_FORMAT(dd1.DateTime,\'%%Y-%%m-%%d 00:00:00\') WHERE dd1.DateTime>=Date_Sub(CURDATE(),INTERVAL 13 DAY) and dd1.PVOutput IS NULL and dd1.CurrentPower>0 ORDER BY dd1.DateTime ASC limit %d", batch_count );
                            if (debug == 1) printf("%s\n",SQLQUERY);
                            DoQuery1(SQLQUERY);
                            while ((row1 = mysql_fetch_row(res1)))  //Need to update these
@@ -2392,6 +2398,7 @@ int main(int argc, char **argv)
   free(last_sent);
 }
 if ((repost ==1)&&(error==0)){
+    printf( "\nrepost\n" ); getchar();
     sma_repost( &conf, debug, verbose );
 }
 

@@ -12,3 +12,6 @@ sma_mysql.o: sma_mysql.c
 	gcc -c sma_mysql.c
 almanac.o: almanac.c
 	gcc -c almanac.c
+sma_pvoutput.o: sma_pvoutput.c
+	gcc -c sma_pvoutput.c
+

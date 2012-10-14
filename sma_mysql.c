@@ -44,7 +44,7 @@ void CloseMySqlDatabase()
    mysql_close(conn);
 }
 
-int DoQuery (char query[1000]){
+int DoQuery (char *query){
 	/* execute query */
 	
 	if (mysql_real_query(conn, query, strlen(query))){
@@ -180,6 +180,36 @@ void update_mysql_tables( ConfType * conf, int debug )
         if (debug == 1) printf("%s\n",SQLQUERY);
         DoQuery(SQLQUERY);
     }
+    /*Check current schema value*/
+
+    sprintf(SQLQUERY,"SELECT data FROM settings WHERE value=\'schema\' " );
+    if (debug == 1) printf("%s\n",SQLQUERY);
+    DoQuery(SQLQUERY);
+    if ((row = mysql_fetch_row(res)))  //if there is a result, update the row
+    {
+       schema_value=atoi(row[0]);
+    }
+    mysql_free_result(res);
+    if( schema_value == 2 ) { //Upgrade from 2 to 3
+        sprintf(SQLQUERY,"CREATE TABLE `LiveData` ( \
+		`id` BIGINT NOT NULL AUTO_INCREMENT , \
+           	`DateTime` datetime NOT NULL, \
+           	`Inverter` varchar(10) NOT NULL, \
+           	`Serial` varchar(40) NOT NULL, \
+		`Description` char(20) NOT NULL , \
+		`Value` INT NOT NULL , \
+		`Units` char(20) NOT NULL , \
+           	`CHANGETIME` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' ON UPDATE CURRENT_TIMESTAMP, \
+           	UNIQUE KEY (`DateTime`,`Inverter`,`Serial`,`Description`), \
+		PRIMARY KEY ( `id` ) \
+		) ENGINE = MYISAM" );
+        if (debug == 1) printf("%s\n",SQLQUERY);
+        DoQuery(SQLQUERY);
+        sprintf( SQLQUERY, "UPDATE `settings` SET `value` = \'schema\', `data` = 3 " );
+        if (debug == 1) printf("%s\n",SQLQUERY);
+        DoQuery(SQLQUERY);
+    }
+    
     mysql_close(conn);
 }
 
@@ -208,3 +238,19 @@ int check_schema( ConfType * conf, char *SCHEMA, int debug )
     }
     return found;
 }
+
+
+void live_mysql( ConfType * conf, int year, int month, int day, int hour, int minute, int second, char * inverter, long long serial, char * description, float value, char * units, int debug )
+/* Live inverter values mysql update */
+{
+    char 	SQLQUERY[2000];
+    char	datetime[20];
+
+    OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, conf->MySqlDatabase);
+    sprintf(datetime, "%d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second );
+    sprintf(SQLQUERY,"INSERT INTO LiveData ( DateTime, Inverter, Serial, Description, Value, Units ) VALUES ( \'%s\', \'%s\', %lld, \'%s\', %.0f, \'%s\'  ) ON DUPLICATE KEY UPDATE DateTime=Datetime, Inverter=VALUES(Inverter), Serial=VALUES(Serial), Description=VALUES(Description), Description=VALUES(Description), Value=VALUES(Value), Units=VALUES(Units)", datetime, inverter, serial, description, value, units);
+    if (debug == 1) printf("%s\n",SQLQUERY);
+    DoQuery(SQLQUERY);
+    mysql_close(conn);
+}
+
