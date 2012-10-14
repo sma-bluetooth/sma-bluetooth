@@ -21,7 +21,7 @@
 #include "sma_struct.h"
 #include "sma_mysql.h"
 
-char *  sunrise( float latitude, float longitude, int debug )
+char *  sunrise( ConfType *conf, int debug )
 {
    //adapted from http://williams.best.vwh.net/sunrise_sunset_algorithm.htm
    time_t curtime;
@@ -29,11 +29,17 @@ char *  sunrise( float latitude, float longitude, int debug )
    struct tm *utctime;
    int day,month,year,hour,minute;
    char *returntime;
+   float latitude, longitude;
+
+   longitude = conf->longitude_f;
+   latitude = conf->latitude_f;
 
    double t,M,L,T,RA,Lquadrant,RAquadrant,sinDec,cosDec;
    double cosH, H, UT, localT,lngHour;
    float localOffset,zenith=91;
    double pi=M_PI;
+
+   printf( "latitude=%f longitude=%f debug=%d\n", latitude, longitude, debug );
 
    returntime = (char *)malloc(6*sizeof(char));
    curtime = time(NULL);  //get time in seconds since epoch (1/1/1970)	
@@ -46,7 +52,7 @@ char *  sunrise( float latitude, float longitude, int debug )
    utctime = gmtime(&curtime);
    
 
-   if( debug == 1 ) printf( "utc=%04d-%02d-%02d %02d:%02d local=%04d-%02d-%02d %02d:%02d diff %d hours\n", utctime->tm_year+1900, utctime->tm_mon+1,utctime->tm_mday,utctime->tm_hour,utctime->tm_min, year, month, day, hour, minute, hour-utctime->tm_hour );
+   if( debug == 1 ) printf( "1. utc=%04d-%02d-%02d %02d:%02d local=%04d-%02d-%02d %02d:%02d diff %d hours\n", utctime->tm_year+1900, utctime->tm_mon+1,utctime->tm_mday,utctime->tm_hour,utctime->tm_min, year, month, day, hour, minute, hour-utctime->tm_hour );
    localOffset=(hour-utctime->tm_hour)+(minute-utctime->tm_min)/60;
    if( debug == 1 ) printf( "localOffset=%f\n", localOffset );
    if(( year > utctime->tm_year+1900 )||( month > utctime->tm_mon+1 )||( day > utctime->tm_mday ))
@@ -55,6 +61,7 @@ char *  sunrise( float latitude, float longitude, int debug )
       localOffset-=24;
    if( debug == 1 ) printf( "localOffset=%f\n", localOffset );
    lngHour = longitude / 15;
+   if( debug == 1 ) printf( "long=%f lngHour=%d\n", longitude, lngHour );
    t = loctime->tm_yday + ((6 - lngHour) / 24);
    //Calculate the Sun's mean anomaly
    M = (0.9856 * t) - 3.289;
@@ -102,10 +109,11 @@ char *  sunrise( float latitude, float longitude, int debug )
    if( localT < 0 ) localT=localT+24;
    if( localT > 24 ) localT=localT-24;
    sprintf( returntime, "%02.0f:%02.0f",floor(localT),floor((localT-floor(localT))*60 )); 
+   if( debug==1 ) printf( "returntime=%s\n", returntime );
    return returntime;
 }
 
-char * sunset( float latitude, float longitude )
+char * sunset( ConfType *conf, int debug )
 {
    //adapted from http://williams.best.vwh.net/sunrise_sunset_algorithm.htm
    time_t curtime;
@@ -118,6 +126,10 @@ char * sunset( float latitude, float longitude )
    double cosH, H, UT, localT,lngHour;
    float localOffset,zenith=91;
    double pi=M_PI;
+   float latitude, longitude;
+
+   longitude = conf->longitude_f;
+   latitude = conf->latitude_f;
 
    returntime = (char *)malloc(6*sizeof(char));
 
