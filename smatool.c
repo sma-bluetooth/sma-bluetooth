@@ -1374,6 +1374,7 @@ int main(int argc, char **argv)
         int  initstarted=0,setupstarted=0,rangedatastarted=0;
         long returnpos;
         int returnline;
+        int max_output;
         char compurl[400];  //seg error on curl fix 2012.01.14
 	char datefrom[100];
 	char dateto[100];
@@ -2287,7 +2288,18 @@ int main(int argc, char **argv)
             }
             else  //Use batch mode 30 values at a time!
             */
-        sprintf(SQLQUERY,"SELECT DATE_FORMAT(dd1.DateTime,\'%%Y%%m%%d\'), DATE_FORMAT(dd1.DateTime,\'%%H:%%i\'), ROUND((dd1.ETotalToday-dd2.EtotalToday)*1000), if( dd1.CurrentPower < ld.Value * 1.2 ,dd1.CurrentPower, ld.Value * 1.2 ), dd1.DateTime FROM DayData as dd1 join DayData as dd2 on dd2.DateTime=DATE_FORMAT(dd1.DateTime,\'%%Y-%%m-%%d 00:00:00\') join LiveData as ld on ld.Inverter = dd1.Inverter and ld.Serial=dd1.Serial and ld.Description='Max Phase 1' and ld.DateTime >= Date_Sub( dd1.Datetime, INTERVAL 1 MINUTE ) and ld.DateTime <= Date_Add( dd1.Datetime, INTERVAL 1 MINUTE )   WHERE dd1.DateTime>=Date_Sub(CURDATE(),INTERVAL 13 DAY) and dd1.PVOutput IS NULL and dd1.CurrentPower>0 ORDER BY dd1.DateTime ASC" );
+        sprintf(SQLQUERY,"SELECT Value FROM LiveData WHERE Inverter = \'%s\' and Serial=\'%s\' and Description=\'Max Phase 1\' ORDER BY DateTime DESC LIMIT 1", conf.Inverter, inverter_serial  );
+        if (debug == 1) printf("%s\n",SQLQUERY);
+        DoQuery(SQLQUERY);
+        batch_count=0;
+        if( mysql_num_rows(res) == 1 )
+        {
+            if ((row = mysql_fetch_row(res)))
+            {
+                max_output = atoi(row[0]) * 1.2;
+            }
+        }
+        sprintf(SQLQUERY,"SELECT DATE_FORMAT(dd1.DateTime,\'%%Y%%m%%d\'), DATE_FORMAT(dd1.DateTime,\'%%H:%%i\'), ROUND((dd1.ETotalToday-dd2.EtotalToday)*1000), if( dd1.CurrentPower < %d ,dd1.CurrentPower, %d ), dd1.DateTime FROM DayData as dd1 join DayData as dd2 on dd2.DateTime=DATE_FORMAT(dd1.DateTime,\'%%Y-%%m-%%d 00:00:00\') WHERE dd1.DateTime>=Date_Sub(CURDATE(),INTERVAL 13 DAY) and dd1.PVOutput IS NULL and dd1.CurrentPower>0 ORDER BY dd1.DateTime ASC", max_output, max_output );
         if (debug == 1) printf("%s\n",SQLQUERY);
         DoQuery(SQLQUERY);
         batch_count=0;
