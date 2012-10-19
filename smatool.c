@@ -2209,6 +2209,7 @@ int main(int argc, char **argv)
 	    sprintf(SQLQUERY,"INSERT INTO DayData ( DateTime, Inverter, Serial, CurrentPower, EtotalToday ) VALUES ( FROM_UNIXTIME(%ld),\'%s\',%ld,%0.f, %.3f ) ON DUPLICATE KEY UPDATE DateTime=Datetime, Inverter=VALUES(Inverter), Serial=VALUES(Serial), CurrentPower=VALUES(CurrentPower), EtotalToday=VALUES(EtotalToday)",(archdatalist+i)->date, (archdatalist+i)->inverter, (archdatalist+i)->serial, (archdatalist+i)->current_value, (archdatalist+i)->accum_value );
 	    if (debug == 1) printf("%s\n",SQLQUERY);
 	    DoQuery(SQLQUERY);
+            getchar();
         }
         mysql_close(conn);
     }
@@ -2288,16 +2289,19 @@ int main(int argc, char **argv)
             }
             else  //Use batch mode 30 values at a time!
             */
-        sprintf(SQLQUERY,"SELECT Value FROM LiveData WHERE Inverter = \'%s\' and Serial=\'%s\' and Description=\'Max Phase 1\' ORDER BY DateTime DESC LIMIT 1", conf.Inverter, inverter_serial  );
-        if (debug == 1) printf("%s\n",SQLQUERY);
+        /* Connect to database */
+        OpenMySqlDatabase( conf.MySqlHost, conf.MySqlUser, conf.MySqlPwd, conf.MySqlDatabase );
+        sprintf(SQLQUERY,"SELECT Value FROM LiveData WHERE Inverter = \'%s\' and Serial=\'%d\' and Description=\'Max Phase 1\' ORDER BY DateTime DESC LIMIT 1", conf.Inverter, inverter_serial  );
+        if (debug == 1) printf("%s\n",SQLQUERY); getchar();
         DoQuery(SQLQUERY);
-        batch_count=0;
+ 
         if( mysql_num_rows(res) == 1 )
         {
             if ((row = mysql_fetch_row(res)))
             {
                 max_output = atoi(row[0]) * 1.2;
             }
+            mysql_free_result( res );
         }
         sprintf(SQLQUERY,"SELECT DATE_FORMAT(dd1.DateTime,\'%%Y%%m%%d\'), DATE_FORMAT(dd1.DateTime,\'%%H:%%i\'), ROUND((dd1.ETotalToday-dd2.EtotalToday)*1000), if( dd1.CurrentPower < %d ,dd1.CurrentPower, %d ), dd1.DateTime FROM DayData as dd1 join DayData as dd2 on dd2.DateTime=DATE_FORMAT(dd1.DateTime,\'%%Y-%%m-%%d 00:00:00\') WHERE dd1.DateTime>=Date_Sub(CURDATE(),INTERVAL 13 DAY) and dd1.PVOutput IS NULL and dd1.CurrentPower>0 ORDER BY dd1.DateTime ASC", max_output, max_output );
         if (debug == 1) printf("%s\n",SQLQUERY);
