@@ -24,6 +24,7 @@
 #include <sys/socket.h>
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/rfcomm.h>
+#include <errno.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
@@ -625,7 +626,7 @@ int auto_set_dates( ConfType * conf, int * daterange, int mysql, char * datefrom
     {
         OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, conf->MySqlDatabase);
         //Get last updated value
-        sprintf(SQLQUERY,"SELECT DATE_FORMAT( DateTime, \"%%Y-%%m-%%d %%H:%%i:%%S\" ) FROM DayData ORDER BY DateTime DESC LIMIT 1" );
+        sprintf(SQLQUERY,"SELECT DATE_FORMAT( DateTime, \"%%Y-%%m-%%d %%H:%%i:%%S\" ) FROM DayData WHERE Inverter=\'%s\' and Serial=\'%s\' ORDER BY DateTime DESC LIMIT 1", conf->Inverter, conf->Serial );
         if (debug == 1) printf("%s\n",SQLQUERY);
         DoQuery(SQLQUERY);
         if ((row = mysql_fetch_row(res)))  //if there is a result, update the row
@@ -805,9 +806,15 @@ InitReturnKeys( ConfType * conf, ReturnType * returnkeylist, int * num_return_ke
    data_follows = 0;
 
    fp=fopen(conf->File,"r");
+   if( fp == NULL ) {
+       printf( "\nCouldn't open file %s", conf->File );
+       printf( "\nerror=%s\n", strerror( errno ));
+       exit(1);
+   }
+   else {
 
-   while (!feof(fp)){	
-	if (fgets(line,400,fp) != NULL){				//read line from smatool.conf
+      while (!feof(fp)){	
+         if (fgets(line,400,fp) != NULL){				//read line from smatool.conf
             if( line[0] != '#' ) 
             {
                 if( strncmp( line, ":unit conversions", 17 ) == 0 )
@@ -853,11 +860,12 @@ InitReturnKeys( ConfType * conf, ReturnType * returnkeylist, int * num_return_ke
                     }
                 }
             }
-        }
-    }
-    fclose(fp);
+         }
+      }
+   fclose(fp);
+   }
    
-    return returnkeylist;
+   return returnkeylist;
 }
 
 //Convert a recieved string to a value
@@ -1161,8 +1169,8 @@ void PrintHelp()
     printf( "\n" );
     printf( "Dates are no longer required - defaults to last update if using mysql\n" );
     printf( "or 2000 to now if not using mysql\n" );
-    printf( "  -from  --datefrom YYYY-DD-MM HH:MM:00    Date range from date\n" );
-    printf( "  -to  --dateto YYYY-DD-MM HH:MM:00        Date range to date\n" );
+    printf( "  -from  --datefrom YYYY-MM-DD HH:MM:00    Date range from date\n" );
+    printf( "  -to  --dateto YYYY-MM-DD HH:MM:00        Date range to date\n" );
     printf( "\n" );
     printf( "The following options are in config file but may be overridden\n" );
     printf( "  -i,  --inverter INVERTER_MODEL           inverter model\n" );
@@ -1974,6 +1982,7 @@ int main(int argc, char **argv)
 				   {
 				       printf("%d-%02d-%02d %02d:%02d:%02d %-20s = %.0f %-20s\n", year, month, day, hour, minute, second, returnkeylist[return_key].description, currentpower_total/returnkeylist[return_key].divisor, returnkeylist[return_key].units );
 				       inverter_serial=serial[3]*16777216+serial[2]*65536+serial[1]*256+serial[0];
+                                       sprintf( conf.Serial, "%lld", inverter_serial );
 				       live_mysql( &conf, year, month, day, hour, minute, second, conf.Inverter, inverter_serial, returnkeylist[return_key].description, currentpower_total/returnkeylist[return_key].divisor, returnkeylist[return_key].units, debug );
                                    }
                                    else
@@ -2003,6 +2012,8 @@ int main(int argc, char **argv)
 				break;
 
 				case 12: // extract time strings $TIMESTRING
+                                    if (debug == 1) printf("received[60]=0x%0X - Expected 0x6D\n", received[60]);
+                                    if (debug == 1) printf("received[60]=0x%0X - Expected 0x6D\n", received[60]);
                                 if(( received[60] == 0x6d )&&( received[61] == 0x23 ))
                                 {
 				    memcpy(timestr,received+63,24);
@@ -2019,6 +2030,10 @@ int main(int argc, char **argv)
                                 }
                                 else
                                 {
+                                    if (received[61]==0x7e) {
+					printf("$TIMESTRING extraction failed. Check password!!!\n");
+				    	exit(-1);
+				    }	
 				    memcpy(timestr,received+63,24);
 				    if (debug == 1) printf("bad extracting timestring\n");
                                     already_read=0;
@@ -2209,7 +2224,7 @@ int main(int argc, char **argv)
 	    sprintf(SQLQUERY,"INSERT INTO DayData ( DateTime, Inverter, Serial, CurrentPower, EtotalToday ) VALUES ( FROM_UNIXTIME(%ld),\'%s\',%ld,%0.f, %.3f ) ON DUPLICATE KEY UPDATE DateTime=Datetime, Inverter=VALUES(Inverter), Serial=VALUES(Serial), CurrentPower=VALUES(CurrentPower), EtotalToday=VALUES(EtotalToday)",(archdatalist+i)->date, (archdatalist+i)->inverter, (archdatalist+i)->serial, (archdatalist+i)->current_value, (archdatalist+i)->accum_value );
 	    if (debug == 1) printf("%s\n",SQLQUERY);
 	    DoQuery(SQLQUERY);
-            getchar();
+            //getchar();
         }
         mysql_close(conn);
     }
@@ -2291,8 +2306,8 @@ int main(int argc, char **argv)
             */
         /* Connect to database */
         OpenMySqlDatabase( conf.MySqlHost, conf.MySqlUser, conf.MySqlPwd, conf.MySqlDatabase );
-        sprintf(SQLQUERY,"SELECT Value FROM LiveData WHERE Inverter = \'%s\' and Serial=\'%d\' and Description=\'Max Phase 1\' ORDER BY DateTime DESC LIMIT 1", conf.Inverter, inverter_serial  );
-        if (debug == 1) printf("%s\n",SQLQUERY); getchar();
+        sprintf(SQLQUERY,"SELECT Value FROM LiveData WHERE Inverter = \'%s\' and Serial=\'%lld\' and Description=\'Max Phase 1\' ORDER BY DateTime DESC LIMIT 1", conf.Inverter, inverter_serial  );
+        if (debug == 1) printf("%s\n",SQLQUERY); //getchar();
         DoQuery(SQLQUERY);
  
         if( mysql_num_rows(res) == 1 )
@@ -2414,7 +2429,7 @@ int main(int argc, char **argv)
   free(last_sent);
 }
 if ((repost ==1)&&(error==0)){
-    printf( "\nrepost\n" ); getchar();
+    printf( "\nrepost\n" ); //getchar();
     sma_repost( &conf, debug, verbose );
 }
 
