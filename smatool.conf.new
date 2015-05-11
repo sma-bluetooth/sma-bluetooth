@@ -5,8 +5,6 @@
 #
 # Not all fields are compulsory
 #
-# Inverter (compulsory) type 1700TL, 2100TL, 3000TL, 3000TLHF, 4000TL, 5000TL, 10000TL  others not tested
-Inverter	3000TL
 # Inverter (compulsory bluetooth address) use "hcitool scan" to find
 BTAddress
 # Inverter Bluetooth timeout (optional) defaults to 5 seconds
@@ -16,7 +14,7 @@ Password
 # Config file (optional) defaults to ./smatool.conf
 Config
 # String file (compulsory) data strings to drive the system
-File		sma.in.new
+File		./sma.in.new
 # Location (optional) required to avoid waking up system in the dark. 
 # Requires  mysql below.
 Latitude
@@ -27,6 +25,6 @@ MySqlDatabase	smatool
 MySqlUser
 MySqlPwd
 # PVOutput.org specific data if you are outputting to PVOutput.org.
-PVOutputURL	http://pvoutput.org/service/r1/addstatus.jsp
+PVOutputURL	http://pvoutput.org/service/r2/addstatus.jsp
 PVOutputKey
 PVOutputSid

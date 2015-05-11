@@ -19,4 +19,4 @@
     #include "sma_struct.h"
 #endif
 
-extern int sma_repost( ConfType *, int, int );
+extern int sma_repost( ConfType * );

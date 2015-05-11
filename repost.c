@@ -39,7 +39,7 @@ size_t write_data(void *ptr, size_t size, size_t nmemb, void *stream)
     return written;
 }
 
-int sma_repost( ConfType * conf, int debug, int verbose )
+int sma_repost( ConfType * conf, FlagType * flag )
 {
     FILE* fp;
     CURL *curl;
@@ -59,7 +59,7 @@ int sma_repost( ConfType * conf, int debug, int verbose )
     starttotal = 0;
     printf("SELECT DATE_FORMAT( dt1.DateTime, \"%%Y%%m%%d\" ), round((dt1.ETotalToday*1000-dt2.ETotalToday*1000),0) FROM DayData as dt1 join DayData as dt2 on dt2.DateTime = DATE_SUB( dt1.DateTime, interval 1 day ) WHERE dt1.DateTime LIKE \"%%-%%-%% 23:55:00\" ' ORDER BY dt1.DateTime DESC" );
     sprintf(SQLQUERY,"SELECT DATE_FORMAT( dt1.DateTime, \"%%Y%%m%%d\" ), round((dt1.ETotalToday*1000-dt2.ETotalToday*1000),0) FROM DayData as dt1 join DayData as dt2 on dt2.DateTime = DATE_SUB( dt1.DateTime, interval 1 day ) WHERE dt1.DateTime LIKE \"%%-%%-%% 23:55:00\" ORDER BY dt1.DateTime DESC" );
-    if (debug == 1) printf("%s\n",SQLQUERY);
+    if (flag->debug == 1) printf("%s\n",SQLQUERY);
     DoQuery(SQLQUERY);
     while(( row = mysql_fetch_row(res) ))  //if there is a result, update the row
     {
@@ -76,7 +76,7 @@ int sma_repost( ConfType * conf, int debug, int verbose )
 	     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 	     //curl_easy_setopt(curl, CURLOPT_FAILONERROR, compurl);
 	     result = curl_easy_perform(curl);
-             if (debug == 1) printf("result = %d\n",result);
+             if (flag->debug == 1) printf("result = %d\n",result);
              rewind( fp );
              fgets( buf, sizeof( buf ), fp );
              result = sscanf( buf, "Bad request %s has no outputs between the requested period", buf1 );
@@ -112,17 +112,17 @@ int sma_repost( ConfType * conf, int debug, int verbose )
                  curl = curl_easy_init();
                  if (curl){
 	            ret=sprintf(compurl,"http://pvoutput.org/service/r2/addoutput.jsp?d=%s&g=%f&key=%s&sid=%s",row[0],dtotal,conf->PVOutputKey,conf->PVOutputSid);
-                    if (debug == 1) printf("url = %s\n",compurl);
+                    if (flag->debug == 1) printf("url = %s\n",compurl);
 		    curl_easy_setopt(curl, CURLOPT_URL, compurl);
 		    curl_easy_setopt(curl, CURLOPT_FAILONERROR, compurl);
 		    result = curl_easy_perform(curl);
                     sleep(1);
-	            if (debug == 1) printf("result = %d\n",result);
+	            if (flag->debug == 1) printf("result = %d\n",result);
 		    curl_easy_cleanup(curl);
                     if( result==0 ) 
                     {
                         sprintf(SQLQUERY,"UPDATE DayData set PVOutput=NOW() WHERE DateTime=\"%s235500\"  ", row[0] );
-                        if (debug == 1) printf("%s\n",SQLQUERY);
+                        if (flag->debug == 1) printf("%s\n",SQLQUERY);
                         //DoQuery(SQLQUERY);
                     }
                     else
