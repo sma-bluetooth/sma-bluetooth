@@ -102,7 +102,7 @@ E $DATA $END;
 :TypeLabel %END
 S 7E 40 00 3E $ADD2 ff ff ff ff ff ff 01 00 7E FF 03 60 65 09 a0 ff ff ff ff ff ff 00 00 $MYSUSYID $MYSERIAL 00 00 00 00 00 00 $CNT 80 00 02 00 58 00 1e 82 00 FF 20 82 00 $CRC 7e $END;
 E $DATA $END;
-:DeviceStatus
+:DeviceStatus $END;
 S 7E 40 00 3E $ADD2 ff ff ff ff ff ff 01 00 7E FF 03 60 65 09 a0 ff ff ff ff ff ff 00 00 $MYSUSYID $MYSERIAL 00 00 00 00 00 00 $CNT 80 00 02 80 51 00 64 41 00 FF 64 41 00 $CRC 7e $END;
 E $DATA $END;
 :getrangedata $END;  //get archived data for a particular date range
