@@ -267,7 +267,7 @@ int check_schema( ConfType * conf, FlagType * flag, char *SCHEMA )
 }
 
 
-void live_mysql( ConfType * conf, FlagType * flag, time_t * idate, char * inverter, long long serial, char * description, char * value, char * units, int persistent )
+void live_mysql( ConfType conf, FlagType flag, LiveDataType *livedatalist, int livedatalen )
 /* Live inverter values mysql update */
 {
     struct tm 	*loctime;
@@ -275,36 +275,39 @@ void live_mysql( ConfType * conf, FlagType * flag, time_t * idate, char * invert
     char	datetime[20];
     int 	day,month,year,hour,minute,second;
     int		live_data=1;
+    int		i;
     MYSQL_ROW 	row;
  
-    loctime = localtime(idate);
-    day = loctime->tm_mday;
-    month = loctime->tm_mon +1;
-    year = loctime->tm_year + 1900;
-    hour = loctime->tm_hour;
-    minute = loctime->tm_min;
-    second = loctime->tm_sec;
+    OpenMySqlDatabase( conf.MySqlHost, conf.MySqlUser, conf.MySqlPwd, conf.MySqlDatabase);
+    for( i=0; i<livedatalen; i++ ) {
+        loctime = localtime(&(livedatalist+i)->date);
+        day = loctime->tm_mday;
+        month = loctime->tm_mon +1;
+        year = loctime->tm_year + 1900;
+        hour = loctime->tm_hour;
+        minute = loctime->tm_min;
+        second = loctime->tm_sec;
 
-    OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, conf->MySqlDatabase);
-    live_data=1;
-    if( persistent == 1 ) {
-        sprintf( SQLQUERY, "SELECT IF (Value = \"%s\",NULL,Value) FROM LiveData where Inverter=\"%s\" and Serial=%llu and Description=\"%s\" ORDER BY DateTime DESC LIMIT 1", value, inverter, serial, description );
-        if (flag->debug == 1) printf("%s\n",SQLQUERY);
-        if( DoQuery(SQLQUERY) == 0 ) {
-            if ((row = mysql_fetch_row(res)))  //if there is a result, update the row
-            {
-                 if( row[0] == NULL ) {
-                     live_data=0;
-                 }
+        live_data=1;
+        if( (livedatalist+i)->Persistent == 1 ) {
+            sprintf( SQLQUERY, "SELECT IF (Value = \"%s\",NULL,Value) FROM LiveData where Inverter=\"%s\" and Serial=%llu and Description=\"%s\" ORDER BY DateTime DESC LIMIT 1", (livedatalist+i)->Value, (livedatalist+i)->inverter, (livedatalist+i)->serial, (livedatalist+i)->Description );
+            if (flag.debug == 1) printf("%s\n",SQLQUERY);
+            if( DoQuery(SQLQUERY) == 0 ) {
+                if ((row = mysql_fetch_row(res)))  //if there is a result, update the row
+                {
+                     if( row[0] == NULL ) {
+                         live_data=0;
+                     }
+                }
+                mysql_free_result(res);
             }
-            mysql_free_result(res);
         }
-    }
-    if( live_data==1 ) {
-        sprintf(datetime, "%d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second );
-        sprintf(SQLQUERY,"INSERT INTO LiveData ( DateTime, Inverter, Serial, Description, Value, Units ) VALUES ( \'%s\', \'%s\', %lld, \'%s\', \'%s\', \'%s\'  ) ON DUPLICATE KEY UPDATE DateTime=Datetime, Inverter=VALUES(Inverter), Serial=VALUES(Serial), Description=VALUES(Description), Description=VALUES(Description), Value=VALUES(Value), Units=VALUES(Units)", datetime, inverter, serial, description, value, units);
-        if (flag->debug == 1) printf("%s\n",SQLQUERY);
-        DoQuery(SQLQUERY);
+        if( live_data==1 ) {
+            sprintf(datetime, "%d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second );
+            sprintf(SQLQUERY,"INSERT INTO LiveData ( DateTime, Inverter, Serial, Description, Value, Units ) VALUES ( \'%s\', \'%s\', %lld, \'%s\', \'%s\', \'%s\'  ) ON DUPLICATE KEY UPDATE DateTime=Datetime, Inverter=VALUES(Inverter), Serial=VALUES(Serial), Description=VALUES(Description), Description=VALUES(Description), Value=VALUES(Value), Units=VALUES(Units)", datetime, (livedatalist+i)->inverter, (livedatalist+i)->serial, (livedatalist+i)->Description, (livedatalist+i)->Value, (livedatalist+i)->Units);
+            if (flag.debug == 1) printf("%s\n",SQLQUERY);
+            DoQuery(SQLQUERY);
+        }
     }
     mysql_close(conn);
 }

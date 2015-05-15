@@ -13,4 +13,4 @@ extern int DoQuery2(char *);
 extern int install_mysql_tables( ConfType *, FlagType *,  char * );
 extern void update_mysql_tables( ConfType *, FlagType *  );
 extern int check_schema( ConfType *, FlagType *,  char * );
-extern void live_mysql( ConfType *, FlagType *, time_t *, char *, unsigned long long, char *, char *, char *, int );
+extern void live_mysql( ConfType, FlagType, LiveDataType *, int );

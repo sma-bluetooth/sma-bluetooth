@@ -57,31 +57,34 @@ int ConnectSocket ( ConfType * conf )
 /*
  * Update internal running list with live data for later processing
  */
-int UpdateLiveList( ConfType * conf, FlagType * flag,  UnitType *unit, char * format, time_t idate,  char * description, float fvalue, int ivalue, char * svalue, char * units, int persistent, int * livedatalen, LiveDataType * livedatalist )
+int UpdateLiveList( ConfType * conf, FlagType * flag,  UnitType *unit, char * format, time_t idate,  char * description, float fvalue, int ivalue, char * svalue, char * units, int persistent, int * livedatalen, LiveDataType ** livedatalist )
 {
     unsigned long long 	inverter_serial;
 
     if( strlen( unit->Inverter ) > 0 ) {
         if( (*livedatalen) == 0 )
-              livedatalist = ( LiveDataType *)malloc( sizeof( LiveDataType ) );
-        else
-              livedatalist = ( LiveDataType *)realloc( livedatalist, sizeof( LiveDataType )*((*livedatalen)+1));
-        (livedatalist+(*livedatalen))->date=idate;
-        strcpy((livedatalist+(*livedatalen))->inverter,unit->Inverter);
-        inverter_serial=(unit->Serial[0]<<24)+(unit->Serial[1]<<16)+(unit->Serial[2]<<8)+unit->Serial[3];
-        (livedatalist+(*livedatalen))->serial=inverter_serial;
-        strcpy( (livedatalist+(*livedatalen))->Description, description );
-        strcpy(  (livedatalist+(*livedatalen))->Units, units );
-        if( fvalue >= 0 )
-            sprintf( (livedatalist+(*livedatalen))->Value, format, fvalue );
-        else if( ivalue > 0 )
-            sprintf( (livedatalist+(*livedatalen))->Value, format, ivalue );
-        else if( strlen(svalue)>0 ) {
-            sprintf( (livedatalist+(*livedatalen))->Value, format, svalue );
+        {
+              (*livedatalist) = ( LiveDataType *)malloc( sizeof( LiveDataType ) );
         }
-        (livedatalist+(*livedatalen))->Persistent = persistent;
+        else
+        {
+              (*livedatalist) = ( LiveDataType *)realloc( (*livedatalist), sizeof( LiveDataType )*((*livedatalen)+1));
+        }
+        ((*livedatalist)+(*livedatalen))->date=idate;
+        strcpy(((*livedatalist)+(*livedatalen))->inverter,unit->Inverter);
+        inverter_serial=(unit->Serial[0]<<24)+(unit->Serial[1]<<16)+(unit->Serial[2]<<8)+unit->Serial[3];
+        ((*livedatalist)+(*livedatalen))->serial=inverter_serial;
+        strcpy( ((*livedatalist)+(*livedatalen))->Description, description );
+        strcpy(  ((*livedatalist)+(*livedatalen))->Units, units );
+        if( fvalue >= 0 )
+            sprintf( ((*livedatalist)+(*livedatalen))->Value, format, fvalue );
+        else if( ivalue > 0 )
+            sprintf( ((*livedatalist)+(*livedatalen))->Value, format, ivalue );
+        else if( strlen(svalue)>0 ) {
+            sprintf( ((*livedatalist)+(*livedatalen))->Value, format, svalue );
+        }
+        ((*livedatalist)+(*livedatalen))->Persistent = persistent;
     
-        live_mysql( conf, flag, &idate, unit->Inverter, inverter_serial, description, (livedatalist+(*livedatalen))->Value , units, persistent );
         (*livedatalen)++;
     }
     else
@@ -92,14 +95,12 @@ int UpdateLiveList( ConfType * conf, FlagType * flag,  UnitType *unit, char * fo
 }
 
 
-int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, FILE * fp, int *linenum)
+int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, FILE * fp, int *linenum, ArchDataType **archdatalist, int *archdatalen , LiveDataType **livedatalist, int *livedatalen)
 {
    char  *line;
    size_t len=0;
    ssize_t read;
    int   i, j, cc, rr;
-   int	 archdatalen=0;
-   int	 livedatalen=0;
    int	 datalen=0;
    int   failedbluetooth=0;
    int	 error=0;
@@ -121,8 +122,6 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
    unsigned char dest_address[6] = { 0 };
    unsigned char timestr[25] = { 0 };
    ReadRecordType readRecord;
-   ArchDataType *archdatalist=NULL;
-   LiveDataType *livedatalist=NULL;
    char  *lineread;
    unsigned char * last_sent;
    unsigned char * data;
@@ -158,7 +157,6 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
     /* get the report time - used in various places */
     reporttime = time(NULL);  //get time in seconds since epoch (1/1/1970)
 
- 
     while (( read = getline(&line,&len,fp) ) != -1){	//read line from sma.in
    	(*linenum)++;
    	last_sent = (unsigned  char *)malloc( sizeof( unsigned char ));
@@ -224,12 +222,6 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
             {
                 already_read=0;
                 found=0;
-                if( archdatalen > 0 )
-                    free( archdatalist );
-                archdatalen=0;
-                if( livedatalen > 0 )
-                    free( livedatalist );
-                livedatalen=0;
                 strcpy( lineread, "" );
                 sleep(10);
                 failedbluetooth++;
@@ -760,12 +752,6 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                             }
                             already_read=0;
                             found=0;
-                            if( archdatalen > 0 )
-                                free( archdatalist );
-                            archdatalen=0;
-                            if( livedatalen > 0 )
-                                free( livedatalist );
-                            livedatalen=0;
                             strcpy( lineread, "" );
                             failedbluetooth++;
                             if( failedbluetooth > 60 )
@@ -808,7 +794,7 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                             prev_idate = idate-300;
 
                                         ConvertStreamtoFloat( datarecord+4, 8, &gtotal );
-                                        if(archdatalen == 0 )
+                                        if((*archdatalen) == 0 )
                                             ptotal = gtotal;
 	                                    printf("\n%d/%d/%4d %02d:%02d:%02d  total=%.3f Kwh current=%.0f Watts togo=%d i=%d crc=%d", day, month, year, hour, minute,second, gtotal/1000, (gtotal-ptotal)*12, togo, i, crc_at_end);
 					    if( idate != prev_idate+300 ) {
@@ -816,17 +802,17 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                 error=1;
 					        break;
                                             }
-                                            if( archdatalen == 0 )
-                                                archdatalist = ( ArchDataType *)malloc( sizeof( ArchDataType ) );
+                                            if( (*archdatalen) == 0 )
+                                                (*archdatalist) = ( ArchDataType *)malloc( sizeof( ArchDataType ) );
                                             else
-                                                archdatalist = ( ArchDataType *)realloc( archdatalist, sizeof( ArchDataType )*(archdatalen+1));
-					    (archdatalist+archdatalen)->date=idate;
-                                            strcpy((archdatalist+archdatalen)->inverter,unit[0]->Inverter);
+                                                (*archdatalist) = ( ArchDataType *)realloc( (*archdatalist), sizeof( ArchDataType )*((*archdatalen)+1));
+					    ((*archdatalist)+(*archdatalen))->date=idate;
+                                            strcpy(((*archdatalist)+(*archdatalen))->inverter,unit[0]->Inverter);
 				            inverter_serial=(unit[0]->Serial[0]<<24)+(unit[0]->Serial[1]<<16)+(unit[0]->Serial[2]<<8)+unit[0]->Serial[3];
-				            (archdatalist+archdatalen)->serial=inverter_serial;
-                                            (archdatalist+archdatalen)->accum_value=gtotal/1000;
-                                            (archdatalist+archdatalen)->current_value=(gtotal-ptotal)*12;
-                                            archdatalen++;
+				            ((*archdatalist)+(*archdatalen))->serial=inverter_serial;
+                                            ((*archdatalist)+(*archdatalen))->accum_value=gtotal/1000;
+                                            ((*archdatalist)+(*archdatalen))->current_value=(gtotal-ptotal)*12;
+                                            (*archdatalen)++;
                                             ptotal=gtotal;
                                             j=0; //get ready for another record
                                         }
@@ -837,12 +823,14 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                         if( read_bluetooth( conf, flag, &readRecord, s, &rr, received, cc, last_sent, &terminated ) != 0 )
                                         {
                                             found=0;
-                                            if( archdatalen > 0 )
+                                            /*
+                                            if( (*archdatalen) > 0 )
                                                 free( archdatalist );
-                                            archdatalen=0;
-                                            if( livedatalen > 0 )
+                                            (*archdatalen)=0;
+                                            if( (*livedatalen) > 0 )
                                                 free( livedatalist );
-                                            livedatalen=0;
+                                            (*livedatalen)=0;
+                                            */
                                             strcpy( lineread, "" );
                                             sleep(10);
                                             failedbluetooth++;
@@ -955,7 +943,7 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                else
                                                    persistent = conf->returnkeylist[return_key].persistent;
 		       			       printf("%d-%02d-%02d %02d:%02d:%02d %-30s = %.0f %-20s\n", year, month, day, hour, minute, second, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, conf->returnkeylist[return_key].units );
-                                               UpdateLiveList( conf, flag, unit[0], "%.0f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%.0f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, livedatalen, livedatalist );
 					       break;
         				   case 1 :
                                                ConvertStreamtoFloat( data+i+8, datalength, &currentpower_total );
@@ -964,7 +952,7 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                else
                                                    persistent = conf->returnkeylist[return_key].persistent;
 		       			       printf("%d-%02d-%02d %02d:%02d:%02d %-30s = %.1f %-20s\n", year, month, day, hour, minute, second, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, conf->returnkeylist[return_key].units );
-                                               UpdateLiveList( conf, flag, unit[0], "%.1f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%.1f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, livedatalen, livedatalist );
 					       break;
         				   case 2 :
                                                ConvertStreamtoFloat( data+i+8, datalength, &currentpower_total );
@@ -973,7 +961,7 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                else
                                                    persistent = conf->returnkeylist[return_key].persistent;
 		       			       printf("%d-%02d-%02d %02d:%02d:%02d %-30s = %.2f %-20s\n", year, month, day, hour, minute, second, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, conf->returnkeylist[return_key].units );
-                                               UpdateLiveList( conf, flag, unit[0], "%.2f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%.2f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, livedatalen, livedatalist );
 					       break;
         				   case 3 :
                                                ConvertStreamtoFloat( data+i+8, datalength, &currentpower_total );
@@ -982,7 +970,7 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                else
                                                    persistent = conf->returnkeylist[return_key].persistent;
 		       			       printf("%d-%02d-%02d %02d:%02d:%02d %-30s = %.3f %-20s\n", year, month, day, hour, minute, second, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, conf->returnkeylist[return_key].units );
-                                               UpdateLiveList( conf, flag, unit[0], "%.3f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%.3f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, livedatalen, livedatalist );
 					       break;
         				   case 4 :
                                                ConvertStreamtoFloat( data+i+8, datalength, &currentpower_total );
@@ -991,14 +979,14 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                else
                                                    persistent = conf->returnkeylist[return_key].persistent;
 		       			       printf("%d-%02d-%02d %02d:%02d:%02d %-30s = %.4f %-20s\n", year, month, day, hour, minute, second, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, conf->returnkeylist[return_key].units );
-                                               UpdateLiveList( conf, flag, unit[0], "%.4f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%.4f",  idate, conf->returnkeylist[return_key].description, currentpower_total/conf->returnkeylist[return_key].divisor, -1, (char *)NULL, conf->returnkeylist[return_key].units, persistent, livedatalen, livedatalist );
 					       break;
                                            case 97 :
 
                                                idate=ConvertStreamtoTime( data+i+4, 4, &idate, &day, &month, &year, &hour, &minute, &second  );
 		       			       printf("                    %-30s = %d-%02d-%02d %02d:%02d:%02d\n", conf->returnkeylist[return_key].description, year, month, day, hour, minute, second );
                                                sprintf( valuebuf, "%d-%02d-%02d %02d:%02d:%02d", year, month, day, hour, minute, second );
-                                               UpdateLiveList( conf, flag, unit[0], "%s",  idate, conf->returnkeylist[return_key].description, -1.0, -1, valuebuf, conf->returnkeylist[return_key].units, conf->returnkeylist[return_key].persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%s",  idate, conf->returnkeylist[return_key].description, -1.0, -1, valuebuf, conf->returnkeylist[return_key].units, conf->returnkeylist[return_key].persistent, livedatalen, livedatalist );
 
                                                break;
         				   case 98 :
@@ -1006,7 +994,7 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                ConvertStreamtoInt( data+i+8, 2, &index );
                                                datastring = return_xml_data( conf, index );
 		       			       printf("%d-%02d-%02d %02d:%02d:%02d %-30s = %s %-20s\n", year, month, day, hour, minute, second, conf->returnkeylist[return_key].description, datastring, conf->returnkeylist[return_key].units );
-                                               UpdateLiveList( conf, flag, unit[0], "%s",  idate, conf->returnkeylist[return_key].description, -1.0, -1, datastring, conf->returnkeylist[return_key].units, conf->returnkeylist[return_key].persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%s",  idate, conf->returnkeylist[return_key].description, -1.0, -1, datastring, conf->returnkeylist[return_key].units, conf->returnkeylist[return_key].persistent, livedatalen, livedatalist );
                                                if( (data+i+1)[0]==0x20 && (data+i+2)[0] == 0x82 ) {
                                                     strcpy( unit[0]->Inverter, datastring );
                                                }
@@ -1016,7 +1004,7 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
                                                idate=ConvertStreamtoTime( data+i+4, 4, &idate, &day, &month, &year, &hour, &minute, &second  );
                                                datastring = ConvertStreamtoString( data+i+8, datalength );
 		       			       printf("%d-%02d-%02d %02d:%02d:%02d %-30s = %s %-20s\n", year, month, day, hour, minute, second, conf->returnkeylist[return_key].description, datastring, conf->returnkeylist[return_key].units );
-                                               UpdateLiveList( conf, flag, unit[0], "%s",  idate, conf->returnkeylist[return_key].description, -1.0, -1, datastring, conf->returnkeylist[return_key].units, conf->returnkeylist[return_key].persistent, &livedatalen, livedatalist );
+                                               UpdateLiveList( conf, flag, unit[0], "%s",  idate, conf->returnkeylist[return_key].description, -1.0, -1, datastring, conf->returnkeylist[return_key].units, conf->returnkeylist[return_key].persistent, livedatalen, livedatalist );
                                                
                                                free( datastring );
 					       break;
@@ -1062,24 +1050,12 @@ int ProcessCommand( ConfType * conf, FlagType * flag, UnitType **unit, int *s, F
  	}
            }
     } 
-    if ((flag->mysql ==1)&&(error==0)){
-	/* Connect to database */
-        OpenMySqlDatabase( conf->MySqlHost, conf->MySqlUser, conf->MySqlPwd, conf->MySqlDatabase );
-        for( i=1; i<archdatalen; i++ ) //Start at 1 as the first record is a dummy
-        {
-	    sprintf(SQLQUERY,"INSERT INTO DayData ( DateTime, Inverter, Serial, CurrentPower, EtotalToday ) VALUES ( FROM_UNIXTIME(%ld),\'%s\',%ld,%0.f, %.3f ) ON DUPLICATE KEY UPDATE DateTime=Datetime, Inverter=VALUES(Inverter), Serial=VALUES(Serial), CurrentPower=VALUES(CurrentPower), EtotalToday=VALUES(EtotalToday)",(archdatalist+i)->date, (archdatalist+i)->inverter, (archdatalist+i)->serial, (archdatalist+i)->current_value, (archdatalist+i)->accum_value );
-	    if (flag->debug == 1) printf("%s\n",SQLQUERY);
-	    DoQuery(SQLQUERY);
-            //getchar();
-        }
-        mysql_close(conn);
-    }
 }
 /*
  * Run a command on an inverter
  *
  */
-char * InverterCommand(  const char * command, ConfType * conf, FlagType * flag, UnitType **unit, int *s, FILE * fp )
+char * InverterCommand(  const char * command, ConfType * conf, FlagType * flag, UnitType **unit, int *s, FILE * fp, ArchDataType **archdatalist, int *archdatalen , LiveDataType **livedatalist, int *livedatalen)
 {
     int linenum;
     char *returnValues=NULL;
@@ -1087,7 +1063,7 @@ char * InverterCommand(  const char * command, ConfType * conf, FlagType * flag,
     if (fseek( fp, 0L, 0 ) < 0 )
         printf( "\nError" );
     if(( linenum = GetLine( command, fp )) > 0 ) {
-        if( ProcessCommand( conf, flag, unit, s, fp, &linenum ) < 0 ) {
+        if( ProcessCommand( conf, flag, unit, s, fp, &linenum, archdatalist, archdatalen, livedatalist, livedatalen ) < 0 ) {
             printf( "\nError need to do something" ); getchar();
         }
     }
@@ -1099,7 +1075,7 @@ char * InverterCommand(  const char * command, ConfType * conf, FlagType * flag,
     return( returnValues );
 }
 
-int OpenInverter( ConfType * conf, FlagType * flag, UnitType **unit, int * s )
+int OpenInverter( ConfType * conf, FlagType * flag, UnitType **unit, int * s, ArchDataType **archdatalist, int *archdatalen , LiveDataType **livedatalist, int *livedatalen )
 {
     FILE * fp;
 
@@ -1112,7 +1088,7 @@ int OpenInverter( ConfType * conf, FlagType * flag, UnitType **unit, int * s )
         perror( "Can't open conf file" );
         return -1;
     }
-    if( InverterCommand( "init", conf, flag, unit, s, fp ) == (char *)NULL )
+    if( InverterCommand( "init", conf, flag, unit, s, fp, archdatalist, archdatalen, livedatalist, livedatalen ) == (char *)NULL )
 
     close( fp );
     return( 0 );

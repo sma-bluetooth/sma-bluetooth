@@ -1242,7 +1242,6 @@ ReadStream( ConfType * conf, FlagType * flag, ReadRecordType * readRecord, int *
      {
          if( read_bluetooth( conf, flag, readRecord, s, streamlen, stream, cc, last_sent, terminated ) != 0 )
          {
-             printf( "\nhere4" ); getchar();
              free( datalist );
              datalist = NULL;
          }
@@ -1438,34 +1437,6 @@ getdoc (char *docname) {
 	}
 
 	return doc;
-}
-
-/**
- *  * xmlStrPrintf:
- *   * @buf:   the result buffer.
- *    * @len:   the result buffer length.
- *     * @msg:   the message with printf formatting.
- *      * @...:   extra parameters for the message.
- *       *
- *        * Formats @msg and places result into @buf.
- *         *
- *          * Returns the number of characters written to @buf or -1 if an error occurs.
- *           */
-int 
-xmlStrPrintf(xmlChar *buf, int len, const xmlChar *msg, ...) {
-    va_list args;
-    int ret;
-    
-    if((buf == NULL) || (msg == NULL)) {
-        return(-1);
-    }
-    
-    va_start(args, msg);
-    ret = vsnprintf((char *) buf, len, (const char *) msg, args);
-    va_end(args);
-    buf[len - 1] = 0; /* be safe ! */
-    
-    return(ret);
 }
 
 xmlXPathObjectPtr
@@ -1738,67 +1709,27 @@ char * debugdate()
 
 int main(int argc, char **argv)
 {
-	FILE *fp;
-        unsigned char * last_sent;
-        ConfType conf;
-        FlagType flag;
-        int 	maximumUnits=1;
-        UnitType *unit;
-        ReadRecordType readRecord;
-        ReturnType *returnkeylist;
-        int num_return_keys=0;
-	unsigned char received[1024];
-	unsigned char datarecord[1024];
-	unsigned char * data;
-	unsigned char send_count = 0x0;
-        unsigned long long inverter_serial;
-        int return_key;
-        int gap=1;
-        int datalength=0;
-        int datalen = 0;
-        int failedbluetooth=0;
-        int terminated=0;
-	int s,i,j,status;
-        int install=0, update=0, already_read=0, no_dark=0;
-        int error=0;
-	int ret,found,crc_at_end, finished=0;
-        int togo=0;
-        int  initstarted=0,setupstarted=0,rangedatastarted=0;
-        long returnpos;
-        int returnline;
-        int max_output;
-        int index;
-        char compurl[400];  //seg error on curl fix 2012.01.14
-        char *datastring;
-        int  pass_i;
-	char line[400];
-	unsigned char dest_address[6] = { 0 };
-	unsigned char src_address[6] = { 0 };
-	unsigned char timestr[25] = { 0 };
-	unsigned char tzhex[2] = { 0 };
-	unsigned char timeset[4] = { 0x30,0xfe,0x7e,0x00 };
-        int  invcode=0;
-	char *lineread;
-	time_t curtime;
-	time_t reporttime;
-	time_t fromtime;
-	time_t totime;
-	time_t idate;
-	time_t prev_idate;
-	struct tm tm;
-	int day,month,year,hour,minute,second,datapoint;
-	char tt[10] = {48,48,48,48,48,48,48,48,48,48}; 
-	char ti[3];	
-	char chan[1];
-	float currentpower_total;
-        int   rr;
-	int linenum = 0;
-	float dtotal;
-	float gtotal;
-	float ptotal;
-	float strength;
-	MYSQL_ROW row, row1;
-	char SQLQUERY[200];
+    FILE 		*fp;
+    unsigned char 	* last_sent;
+    ConfType 		conf;
+    FlagType 		flag;
+    int 		maximumUnits=1;
+    UnitType 		*unit;
+    ReadRecordType 	readRecord;
+    ReturnType 		*returnkeylist;
+    unsigned char 	received[1024];
+    int			i,s;
+    int 		install=0, update=0, already_read=0, no_dark=0;
+    int 		error=0;
+    int 		max_output;
+    char 		compurl[400];  //seg error on curl fix 2012.01.14
+    unsigned char 	tzhex[2] = { 0 };
+    time_t 		reporttime;
+    MYSQL_ROW 		row, row1;
+    char 		SQLQUERY[200];
+    int			archdatalen=0, livedatalen=0;
+    ArchDataType 	*archdatalist=NULL;
+    LiveDataType 	*livedatalist=NULL;
 
     char sunrise_time[6],sunset_time[6];
    
@@ -1892,94 +1823,47 @@ int main(int argc, char **argv)
    	dest_address[0] = conv(strtok(NULL,":"));
 */
 
-        OpenInverter( &conf, &flag, &unit,  &s );
-        InverterCommand( "login", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "typelabel", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "typelabel", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "startuptime", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "getacvoltage", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "getenergyproduction", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "getspotdcpower", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "getspotdcvoltage", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "getspotacpower", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "getgridfreq", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "maxACPower", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "maxACPowerTotal", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "ACPowerTotal", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "DeviceStatus", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "getrangedata", &conf, &flag, &unit, &s, fp );
-        InverterCommand( "logoff", &conf, &flag, &unit, &s, fp );
+        OpenInverter( &conf, &flag, &unit,  &s, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "login", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen  );
+        InverterCommand( "typelabel", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "typelabel", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "startuptime", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "getacvoltage", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "getenergyproduction", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "getspotdcpower", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "getspotdcvoltage", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "getspotacpower", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "getgridfreq", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "maxACPower", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "maxACPowerTotal", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "ACPowerTotal", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "DeviceStatus", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "getrangedata", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
+        InverterCommand( "logoff", &conf, &flag, &unit, &s, fp, &archdatalist, &archdatalen, &livedatalist, &livedatalen );
     }
 
-
     if ((flag.post ==1)&&(flag.mysql==1)&&(error==0)){
-        char batch_string[400];
-        int	batch_count = 0;
-        
-        /* Connect to database */
+	/* Connect to database */
         OpenMySqlDatabase( conf.MySqlHost, conf.MySqlUser, conf.MySqlPwd, conf.MySqlDatabase );
-        /*
-        //Get Start of day value
-        sprintf(SQLQUERY,"SELECT EtotalToday FROM DayData WHERE DateTime=DATE_FORMAT( NOW(), \"%%Y%%m%%d000000\" ) " );
-        if (debug == 1) printf("%s\n",SQLQUERY);
-        DoQuery(SQLQUERY);
-        if (row = mysql_fetch_row(res))  //if there is a result, update the row
+        for( i=1; i<archdatalen; i++ ) //Start at 1 as the first record is a dummy
         {
-            starttotal = atof( (char *)row[0] );
-    
-           /* if( archdatalen < 3 ) //Use Batch mode if greater
-           if ( 1 = 2 ) //Always use batch mode, r2 api is better and r1 may go away one day
-            
-            {
-                for( i=1; i<archdatalen; i++ ) { //Start at 1 as the first record is a dummy
-                   if((archdatalist+i)->current_value > 0 )
-                   {
-	              dtotal = (archdatalist+i)->accum_value*1000 - (starttotal*1000);
-                      idate = (archdatalist+i)->date;
-	              loctime = localtime(&(archdatalist+i)->date);
-                      day = loctime->tm_mday;
-                      month = loctime->tm_mon +1;
-                      year = loctime->tm_year + 1900;
-                      hour = loctime->tm_hour;
-                      minute = loctime->tm_min; 
-                      second = loctime->tm_sec; 
-	              ret=sprintf(compurl,"%s?d=%04i%02i%02i&t=%02i:%02i&v1=%f&v2=%f&key=%s&sid=%s",conf.PVOutputURL,year,month,day,hour,minute,dtotal,(archdatalist+i)->current_value,conf.PVOutputKey,conf.PVOutputSid);
-                      sprintf(SQLQUERY,"SELECT PVOutput FROM DayData WHERE DateTime=\"%i%02i%02i%02i%02i%02i\"  and PVOutput IS NOT NULL", year, month, day, hour, minute, second );
-                      if (debug == 1) printf("%s\n",SQLQUERY);
-                      DoQuery(SQLQUERY);
-	              if (debug == 1) printf("url = %s\n",compurl); 
-                      if (row = mysql_fetch_row(res))  //if there is a result, already done
-                      {
-	                 if (verbose == 1) printf("Already Updated\n");
-                      }
-                      else
-                      {
-                    
-	                curl = curl_easy_init();
-	                if (curl){
-		             curl_easy_setopt(curl, CURLOPT_URL, compurl);
-		             curl_easy_setopt(curl, CURLOPT_FAILONERROR, compurl);
-		             result = curl_easy_perform(curl);
-	                     if (debug == 1) printf("result = %d\n",result);
-		             curl_easy_cleanup(curl);
-                             if( result==0 ) 
-                             {
-                                sprintf(SQLQUERY,"UPDATE DayData  set PVOutput=NOW() WHERE DateTime=\"%i%02i%02i%02i%02i%02i\"  ", year, month, day, hour, minute, second );
-                                if (debug == 1) printf("%s\n",SQLQUERY);
-                                DoQuery(SQLQUERY);
-                             }
-                             else
-                                break;
-		          
-	                }
-                     }
-                   }
-                }
-            }
-            else  //Use batch mode 30 values at a time!
-            */
+	    sprintf(SQLQUERY,"INSERT INTO DayData ( DateTime, Inverter, Serial, CurrentPower, EtotalToday ) VALUES ( FROM_UNIXTIME(%ld),\'%s\',%ld,%0.f, %.3f ) ON DUPLICATE KEY UPDATE DateTime=Datetime, Inverter=VALUES(Inverter), Serial=VALUES(Serial), CurrentPower=VALUES(CurrentPower), EtotalToday=VALUES(EtotalToday)",(archdatalist+i)->date, (archdatalist+i)->inverter, (archdatalist+i)->serial, (archdatalist+i)->current_value, (archdatalist+i)->accum_value );
+	    if (flag.debug == 1) printf("%s\n",SQLQUERY);
+	    DoQuery(SQLQUERY);
+            //getchar();
+        }
+        mysql_close(conn);
+
+        char 			batch_string[400];
+        int			batch_count = 0;
+        unsigned long long 	inverter_serial;
+        
+        //Update Mysql with live data 
+        live_mysql( conf, flag, livedatalist, livedatalen );
+        printf( "\nbefore update to PVOutput" ); getchar();
         /* Connect to database */
         OpenMySqlDatabase( conf.MySqlHost, conf.MySqlUser, conf.MySqlPwd, conf.MySqlDatabase );
+	inverter_serial=(unit[0].Serial[0]<<24)+(unit[0].Serial[1]<<16)+(unit[0].Serial[2]<<8)+unit[0].Serial[3];
         sprintf(SQLQUERY,"SELECT Value FROM LiveData WHERE Inverter = \'%s\' and Serial=\'%lld\' and Description=\'Max Phase 1\' ORDER BY DateTime DESC LIMIT 1", unit[0].Inverter, inverter_serial  );
         if (flag.debug == 1) printf("%s\n",SQLQUERY); //getchar();
         DoQuery(SQLQUERY);
@@ -2096,10 +1980,16 @@ int main(int argc, char **argv)
         mysql_close(conn);
     }
 
-  close(s);
-  if ((flag.repost ==1)&&(error==0)){
-       printf( "\nrepost\n" ); //getchar();
-       sma_repost( &conf );
+    if( archdatalen > 0 )
+        free( archdatalist );
+    archdatalen=0;
+    if( livedatalen > 0 )
+        free( livedatalist );
+    livedatalen=0;
+    close(s);
+    if ((flag.repost ==1)&&(error==0)){
+        printf( "\nrepost\n" ); //getchar();
+        sma_repost( &conf );
 }
 
 return 0;
