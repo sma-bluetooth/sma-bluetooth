@@ -1529,7 +1529,7 @@ void PrintHelp()
     printf( "  -to  --dateto YYYY-MM-DD HH:MM:00        Date range to date\n" );
     printf( "\n" );
     printf( "The following options are in config file but may be overridden\n" );
-    printf( "  -i,  --inverter INVERTER_MODEL           inverter model\n" );
+    printf( "  -i,  --inverter INVERTER_MODEL           inverter model (DEPRECATED)\n" );
     printf( "  -a,  --address INVERTER_ADDRESS          inverter BT address\n" );
     printf( "  -t,  --timeout TIMEOUT                   bluetooth timeout (secs) default 5\n" );
     printf( "  -p,  --password PASSWORD                 inverter user password default 0000\n" );
@@ -1586,7 +1586,11 @@ int ReadCommandConfig( ConfType *conf, FlagType *flag, int argc, char **argv, in
 	}
 	else if (strcmp(argv[i],"-repost")==0){
 	    i++;
-            flag->repost=1;
+	    flag->repost=1;
+	}
+	else if ((strcmp(argv[i],"-i")==0)||(strcmp(argv[i],"--inverter")==0)){
+	    printf("Warning: this option (--inverter, -i) is deprecated\n" );
+	    i++;
 	}
         else if ((strcmp(argv[i],"-a")==0)||(strcmp(argv[i],"--address")==0)){
             i++;
@@ -1677,7 +1681,7 @@ int ReadCommandConfig( ConfType *conf, FlagType *flag, int argc, char **argv, in
 	else if (strcmp(argv[i],"--UPDATE")==0) (*update)=1;
         else
         {
-           printf("Bad Syntax\n\n" );
+           printf("Unknown option: %s\n\n", argv[i]);
            for( i=0; i< argc; i++ )
              printf( "%s ", argv[i] );
            printf( "\n\n" );
