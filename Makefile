@@ -1,3 +1,10 @@
+OUT = $(ODIR)/smatool
+CC = gcc
+ODIR = build
+SDIR = .
+SOURCES = almanac.c repost.c sb_commands.c sma_mysql.c smatool.c
+OBJS = $(patsubst %.c,$(ODIR)/%.o,$(SOURCES))
+
 ARCH := $(shell getconf LONG_BIT)
 C_FLAGS_64 := -L/usr/lib64/mysql
 C_FLAGS_32 := -L/usr/lib/mysql
@@ -6,26 +13,21 @@ PKG_CONFIG=bluez libxml-2.0 libcurl
 LINKER_LIBS=-lmysqlclient $(shell pkg-config --libs $(PKG_CONFIG))
 COMPILER_LIBS=$(shell pkg-config --cflags $(PKG_CONFIG))
 
-smatool: smatool.o repost.o sma_mysql.o almanac.o sb_commands.o sma_struct.h
-	gcc smatool.o repost.o sma_mysql.o almanac.o sb_commands.o -fstack-protector-all -O2 -Wall $(C_FLAGS_$(ARCH)) $(LINKER_LIBS) -lm -o smatool 
+$(OUT): $(OBJS)
+	$(CC) $(OBJS) -fstack-protector-all -O2 -Wall $(C_FLAGS_$(ARCH)) $(LINKER_LIBS) -lm -o $(OUT) 
 
-smatool.o: smatool.c sma_mysql.h
-	gcc -O2 $(COMPILER_LIBS) -c smatool.c -o build/smatool.o
-repost.o: repost.c sma_mysql.h
-	gcc -O2 -c repost.c
-sma_mysql.o: sma_mysql.c
-	gcc -O2 -c sma_mysql.c
-almanac.o: almanac.c
-	gcc -O2 -c almanac.c
-sma_pvoutput.o: sma_pvoutput.c
-	gcc -O2 -c sma_pvoutput.c
-sb_commands.o: sb_commands.c
-	gcc -O2 -c sb_commands.c
+$(ODIR)/%.o: $(SDIR)/%.c
+	$(CC) -O2 $(COMPILER_LIBS) -c $< -o $@
+
+$(ODIR)/repost.o $(ODIR)/smatool.o: sma_mysql.h
+
+.PHONY: clean install
+
 clean:
-	-rm *.o
+	rm -f $(ODIR)/*.o $(OUT)
+
 install:
 	install -m 755 smatool /usr/local/bin
 	install -m 644 sma.in.new /usr/local/bin
 	install -m 644 smatool.conf.new /usr/local/etc
 	install -m 644 smatool.xml /usr/local/bin
-
