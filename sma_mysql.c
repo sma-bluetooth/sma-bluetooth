@@ -142,7 +142,7 @@ int install_mysql_tables( ConfType * conf, FlagType * flag, char *SCHEMA )
            `Units` varchar(20) DEFAULT NULL, \
            `CHANGETIME` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' ON UPDATE CURRENT_TIMESTAMP, \
            PRIMARY KEY (`id`), \
-           UNIQUE KEY 'DateTime'(`DateTime`,`Inverter`,`Serial`,`Description`) \
+           UNIQUE KEY `DateTime`(`DateTime`,`Inverter`,`Serial`,`Description`) \
            ) ENGINE=MyISAM" );
        if (flag->debug == 1) printf("%s\n",SQLQUERY);
        DoQuery(SQLQUERY);
