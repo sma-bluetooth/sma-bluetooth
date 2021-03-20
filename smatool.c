@@ -33,8 +33,8 @@
 #include <curl/curl.h>
 #include "repost.h"
 #include "sma_mysql.h"
-#include <libxml2/libxml/parser.h>
-#include <libxml2/libxml/xpath.h>
+#include <libxml/parser.h>
+#include <libxml/xpath.h>
 
 
 /*
